@@ -240,8 +240,8 @@ export default function Dashboard() {
       content_snippet: "Baseline orchestrator synchronization complete across 4 risk intelligence domains.",
       target_orders: [],
       toast_message: "System baseline active. Vector telemetry online.",
-      time_str: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
-      timestamp: new Date().toISOString(),
+      time_str: "18:00:00",
+      timestamp: "2026-08-24T18:00:00Z",
     }
   ]);
   const [activeToast, setActiveToast] = useState<ToastNotification | null>(null);
@@ -255,7 +255,7 @@ export default function Dashboard() {
       id: "initial",
       sender: "assistant",
       text: "Welcome to SentinelChain Grounded Intelligence. Ask any question regarding active port strikes, cyclone advisories, GST tariff updates, or sub-tier manufacturing delays in the vector database.",
-      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      timestamp: "18:00",
     }
   ]);
 
@@ -354,11 +354,13 @@ export default function Dashboard() {
     const questionToAsk = queryText || chatInput;
     if (!questionToAsk || !questionToAsk.trim() || chatLoading) return;
 
+    const currentTimeStr = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
     const userMsg: ChatMessage = {
       id: String(Date.now()),
       sender: "user",
       text: questionToAsk.trim(),
-      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      timestamp: currentTimeStr,
     };
 
     setChatMessages((prev) => [...prev, userMsg]);
@@ -458,7 +460,7 @@ export default function Dashboard() {
             </div>
             <div className="flex-1 space-y-1 text-xs">
               <div className="flex items-center justify-between">
-                <span className="font-bold uppercase tracking-wider text-[10px]">
+                <span className="font-bold uppercase tracking-wider text-[10px]" suppressHydrationWarning>
                   Live Threat Ingestion • {activeToast.timestamp}
                 </span>
                 <button
@@ -845,7 +847,7 @@ export default function Dashboard() {
                         </div>
                       )}
 
-                      <div className="text-[10px] text-neutral-500 text-right">
+                      <div className="text-[10px] text-neutral-500 text-right" suppressHydrationWarning>
                         {msg.timestamp}
                       </div>
                     </div>
@@ -1153,7 +1155,7 @@ export default function Dashboard() {
                   >
                     <div className="space-y-1 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-mono text-[11px] text-neutral-500 font-semibold">
+                        <span className="font-mono text-[11px] text-neutral-500 font-semibold" suppressHydrationWarning>
                           [{evt.time_str}]
                         </span>
                         <span className="font-bold text-neutral-200">
