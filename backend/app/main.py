@@ -4,6 +4,7 @@ Supply chain risk intelligence platform powered by ChromaDB vector search,
 modular multi-agent orchestration, and Google Gemini reasoning.
 """
 import sys
+import random
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
@@ -21,6 +22,7 @@ if str(backend_dir) not in sys.path:
 from agents import supplier_agent, weather_agent, policy_agent, logistics_agent, orchestrator
 from data.mock_orders import MOCK_ORDERS, get_all_orders, get_order_by_id
 from data.mock_documents import MOCK_DOCUMENTS, get_all_documents, get_document_by_id
+from data.mock_feed_events import RISK_FEED_SCENARIOS, get_all_scenarios
 from data.vector_db import (
     initialize_and_load_vector_db,
     search_similar_documents,
@@ -43,6 +45,9 @@ AGENT_REGISTRY = {
     "policy_agent": policy_agent,
     "logistics_agent": logistics_agent,
 }
+
+# Live Feed Event Rotation Tracker
+feed_scenario_index = 0
 
 
 @asynccontextmanager
@@ -114,6 +119,14 @@ class AskQuestionResponse(BaseModel):
     count: int = Field(default=0, description="Count of cited sources")
 
 
+class LiveRiskFeedEventResponse(BaseModel):
+    event: Dict[str, Any] = Field(..., description="Generated disruption event payload")
+    impacted_order_ids: List[str] = Field(default_factory=list, description="IDs of orders affected by this event")
+    all_orders: List[Dict[str, Any]] = Field(default_factory=list, description="Updated order list with live risk levels")
+    toast_message: str = Field(..., description="Alert text for frontend toast notification")
+    timestamp: str = Field(..., description="Event generation timestamp")
+
+
 # ==========================================
 # General & Health Endpoints
 # ==========================================
@@ -126,6 +139,8 @@ def read_root():
         "gemini_configured": bool(get_gemini_api_key()),
         "endpoints": [
             "/api/orders",
+            "/api/feed/next-event",
+            "/api/feed/scenarios",
             "/api/documents",
             "/api/documents/search",
             "/api/risk/evaluate",
@@ -147,6 +162,84 @@ def health_check():
         vector_db_documents=doc_count,
         gemini_configured=bool(get_gemini_api_key()),
     )
+
+
+# ==========================================
+# Live Risk Feed Engine: /api/feed/next-event
+# ==========================================
+@app.post("/api/feed/next-event", response_model=LiveRiskFeedEventResponse, tags=["Live Risk Feed"])
+@app.get("/api/feed/next-event", response_model=LiveRiskFeedEventResponse, tags=["Live Risk Feed"])
+def generate_next_feed_event(random_pick: bool = Query(False, description="Pick random scenario instead of sequential")):
+    """
+    Simulates a live streaming risk event from a pool of realistic supply chain scenarios.
+    Runs the multi-agent orchestrator across all MSME orders, updating matching order risk badges
+    and returning a live toast alert message and activity log item.
+    """
+    global feed_scenario_index
+
+    if random_pick:
+        scenario = random.choice(RISK_FEED_SCENARIOS)
+    else:
+        scenario = RISK_FEED_SCENARIOS[feed_scenario_index % len(RISK_FEED_SCENARIOS)]
+        feed_scenario_index += 1
+
+    event_time_str = datetime.now(timezone.utc).strftime("%H:%M:%S")
+    event_timestamp_iso = datetime.now(timezone.utc).isoformat()
+
+    event_payload = {
+        "id": f"{scenario['id']}-{int(datetime.now(timezone.utc).timestamp() * 1000) % 100000}",
+        "scenario_id": scenario["id"],
+        "title": scenario["title"],
+        "category": scenario["category"],
+        "severity": scenario["severity"],
+        "affected_locations": scenario["affected_locations"],
+        "affected_sectors": scenario["affected_sectors"],
+        "content_snippet": scenario["content_snippet"],
+        "target_orders": scenario.get("target_orders", []),
+        "toast_message": scenario["toast_message"],
+        "time_str": event_time_str,
+        "timestamp": event_timestamp_iso,
+    }
+
+    # Evaluate live orders and update impacted matching orders
+    raw_orders = get_all_orders()
+    enriched_orders = []
+    impacted_order_ids = scenario.get("target_orders", [])
+
+    for order in raw_orders:
+        assessment = orchestrator.run_all_agents(order)
+        
+        # If this order is directly targeted by the incoming scenario, enforce dynamic severity bump
+        is_target = order["id"] in impacted_order_ids
+        final_risk_level = scenario["severity"] if is_target else assessment["riskLevel"]
+        final_score = 85.0 if (is_target and scenario["severity"] == "high") else assessment["overall_score"]
+
+        enriched_orders.append({
+            **order,
+            "riskLevel": final_risk_level,
+            "overall_risk_level": final_risk_level,
+            "risk_status": "Active Threat" if final_risk_level == "high" else assessment.get("risk_status", "No Active Risk"),
+            "overall_score": final_score,
+            "critical_findings_count": assessment["critical_findings_count"] + (1 if is_target else 0),
+            "executive_summary": scenario["content_snippet"] if is_target else assessment["executive_summary"],
+            "primary_recommendation": assessment["primary_recommendation"],
+            "findings": assessment["findings"],
+            "last_disruption_id": scenario["id"] if is_target else None,
+        })
+
+    return LiveRiskFeedEventResponse(
+        event=event_payload,
+        impacted_order_ids=impacted_order_ids,
+        all_orders=enriched_orders,
+        toast_message=scenario["toast_message"],
+        timestamp=event_time_str,
+    )
+
+
+@app.get("/api/feed/scenarios", tags=["Live Risk Feed"])
+def list_feed_scenarios():
+    """Returns the pre-written pool of realistic risk scenarios."""
+    return {"scenarios": get_all_scenarios(), "count": len(RISK_FEED_SCENARIOS)}
 
 
 # ==========================================

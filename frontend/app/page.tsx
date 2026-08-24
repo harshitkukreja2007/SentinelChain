@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -52,6 +52,12 @@ import {
   User,
   Link as LinkIcon,
   FileText,
+  Radio,
+  Activity,
+  Play,
+  Pause,
+  Bell,
+  X,
 } from "lucide-react";
 
 interface HealthData {
@@ -78,6 +84,7 @@ interface FactualMSMEOrder {
   critical_findings_count?: number;
   executive_summary?: string;
   primary_recommendation?: string;
+  last_disruption_id?: string | null;
 }
 
 interface ChatSource {
@@ -92,6 +99,28 @@ interface ChatMessage {
   sender: "user" | "assistant";
   text: string;
   sources?: ChatSource[];
+  timestamp: string;
+}
+
+interface ActivityFeedItem {
+  id: string;
+  title: string;
+  category: string;
+  severity: "low" | "medium" | "high";
+  affected_locations: string[];
+  affected_sectors: string[];
+  content_snippet: string;
+  target_orders: string[];
+  toast_message: string;
+  time_str: string;
+  timestamp: string;
+}
+
+interface ToastNotification {
+  id: string;
+  message: string;
+  severity: "low" | "medium" | "high";
+  target_orders: string[];
   timestamp: string;
 }
 
@@ -197,6 +226,26 @@ export default function Dashboard() {
   const [healthLoading, setHealthLoading] = useState(false);
   const [filterRisk, setFilterRisk] = useState<"all" | "high" | "medium" | "low">("all");
 
+  // Live Risk Feed state
+  const [isLiveMonitoring, setIsLiveMonitoring] = useState(false);
+  const [feedEvents, setFeedEvents] = useState<ActivityFeedItem[]>([
+    {
+      id: "INIT-EVT-00",
+      title: "ChromaDB Supply Chain Vector Mesh Initialized",
+      category: "Telemetry Initialization",
+      severity: "low",
+      affected_locations: ["Chennai", "Surat", "Ludhiana", "Pune", "Rajkot"],
+      affected_sectors: ["Cross-Sector MSME Procurement"],
+      content_snippet: "Baseline orchestrator synchronization complete across 4 risk intelligence domains.",
+      target_orders: [],
+      toast_message: "System baseline active. Vector telemetry online.",
+      time_str: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+      timestamp: new Date().toISOString(),
+    }
+  ]);
+  const [activeToast, setActiveToast] = useState<ToastNotification | null>(null);
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+
   // Chat Q&A state
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
@@ -240,6 +289,67 @@ export default function Dashboard() {
       setHealthLoading(false);
     }
   }, []);
+
+  // Poll single live risk event
+  const pollNextRiskEvent = useCallback(async () => {
+    try {
+      const res = await fetch("http://127.0.0.1:8000/api/feed/next-event", {
+        method: "POST",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const newEvent: ActivityFeedItem = data.event;
+
+        // 1. Update activity feed history (newest on top)
+        setFeedEvents((prev) => [newEvent, ...prev.slice(0, 24)]);
+
+        // 2. Update orders with live evaluated risk
+        if (data.all_orders && data.all_orders.length > 0) {
+          setOrders(data.all_orders);
+        }
+
+        // 3. Trigger visual toast notification
+        const toastItem: ToastNotification = {
+          id: String(Date.now()),
+          message: data.toast_message || newEvent.title,
+          severity: newEvent.severity,
+          target_orders: data.impacted_order_ids || [],
+          timestamp: newEvent.time_str,
+        };
+        setActiveToast(toastItem);
+
+        // Auto-dismiss toast after 6 seconds
+        setTimeout(() => {
+          setActiveToast((curr) => (curr?.id === toastItem.id ? null : curr));
+        }, 6000);
+      }
+    } catch {
+      // Graceful poll skip
+    }
+  }, []);
+
+  // Manage Live Polling Toggle (8-10 seconds interval)
+  useEffect(() => {
+    if (isLiveMonitoring) {
+      // Fire immediately once on start
+      pollNextRiskEvent();
+      // Set up recurring poll every 8.5 seconds
+      pollingRef.current = setInterval(() => {
+        pollNextRiskEvent();
+      }, 8500);
+    } else {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    }
+
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+      }
+    };
+  }, [isLiveMonitoring, pollNextRiskEvent]);
 
   const handleAskQuestion = async (queryText?: string) => {
     const questionToAsk = queryText || chatInput;
@@ -329,7 +439,53 @@ export default function Dashboard() {
   const lowRiskCount = orders.filter((o) => o.riskLevel === "low").length;
 
   return (
-    <div className="flex min-h-screen bg-neutral-950 text-neutral-100 font-sans antialiased">
+    <div className="flex min-h-screen bg-neutral-950 text-neutral-100 font-sans antialiased relative">
+      {/* Floating Live Real-Time Toast Notification */}
+      {activeToast && (
+        <div className="fixed top-4 right-4 z-50 max-w-md animate-in slide-in-from-top duration-300">
+          <div
+            className={`p-3.5 rounded-lg border shadow-2xl backdrop-blur-md flex items-start gap-3 ${
+              activeToast.severity === "high"
+                ? "bg-red-950/90 border-red-500/50 text-red-100"
+                : activeToast.severity === "medium"
+                ? "bg-amber-950/90 border-amber-500/50 text-amber-100"
+                : "bg-neutral-900/90 border-neutral-700 text-neutral-100"
+            }`}
+          >
+            <div className="p-1 rounded bg-black/40 mt-0.5">
+              <Bell className={`w-4 h-4 ${activeToast.severity === "high" ? "text-red-400 animate-bounce" : "text-amber-400"}`} />
+            </div>
+            <div className="flex-1 space-y-1 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="font-bold uppercase tracking-wider text-[10px]">
+                  Live Threat Ingestion • {activeToast.timestamp}
+                </span>
+                <button
+                  onClick={() => setActiveToast(null)}
+                  className="text-neutral-400 hover:text-white"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <p className="font-medium text-xs leading-snug">{activeToast.message}</p>
+              {activeToast.target_orders.length > 0 && (
+                <div className="flex items-center gap-1.5 pt-0.5">
+                  <span className="text-[10px] text-neutral-300">Impacted:</span>
+                  {activeToast.target_orders.map((ordId) => (
+                    <Badge
+                      key={ordId}
+                      className="bg-black/60 border border-white/20 text-white font-mono text-[9px] px-1.5 py-0"
+                    >
+                      {ordId}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Dense Enterprise Operations Sidebar */}
       <aside className="w-64 flex-shrink-0 border-r border-neutral-800 bg-neutral-900/90 flex flex-col justify-between hidden md:flex">
         <div className="p-4 space-y-6">
@@ -342,6 +498,51 @@ export default function Dashboard() {
               <div className="font-bold text-sm tracking-tight text-neutral-100 uppercase">SentinelChain</div>
               <div className="text-[11px] font-mono text-neutral-400">OPERATIONS COCKPIT</div>
             </div>
+          </div>
+
+          {/* Live Monitoring Feed Control Panel in Sidebar */}
+          <div className="p-3 rounded-lg bg-neutral-950 border border-neutral-800 space-y-2.5">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="font-bold uppercase tracking-wider text-neutral-400 flex items-center gap-1.5">
+                <Radio className={`w-3.5 h-3.5 ${isLiveMonitoring ? "text-emerald-400 animate-pulse" : "text-neutral-500"}`} />
+                Live Risk Feed
+              </span>
+              <Badge
+                variant="outline"
+                className={`text-[9px] px-1.5 py-0 font-mono ${
+                  isLiveMonitoring ? "border-emerald-700 text-emerald-400 bg-emerald-950/40" : "border-neutral-700 text-neutral-500"
+                }`}
+              >
+                {isLiveMonitoring ? "POLLING 8s" : "STANDBY"}
+              </Badge>
+            </div>
+
+            <Button
+              size="sm"
+              onClick={() => setIsLiveMonitoring(!isLiveMonitoring)}
+              className={`w-full h-8 text-xs font-semibold flex items-center justify-center gap-1.5 ${
+                isLiveMonitoring
+                  ? "bg-red-600/90 hover:bg-red-700 text-white"
+                  : "bg-emerald-600 hover:bg-emerald-500 text-white"
+              }`}
+            >
+              {isLiveMonitoring ? (
+                <>
+                  <Pause className="w-3.5 h-3.5" /> Stop Live Monitoring
+                </>
+              ) : (
+                <>
+                  <Play className="w-3.5 h-3.5" /> Start Live Monitoring
+                </>
+              )}
+            </Button>
+
+            <button
+              onClick={() => pollNextRiskEvent()}
+              className="w-full text-center text-[10px] text-neutral-400 hover:text-neutral-200 transition-colors py-0.5"
+            >
+              + Trigger Single Scenario
+            </button>
           </div>
 
           {/* Navigation Links */}
@@ -437,8 +638,10 @@ export default function Dashboard() {
             )}
           </div>
           <div className="flex items-center justify-between text-[10px] text-neutral-400">
-            <span>Grounded Q&A:</span>
-            <span className="font-mono text-emerald-400 font-semibold">Active (/api/ask)</span>
+            <span>Continuous Watch:</span>
+            <span className={`font-mono font-semibold ${isLiveMonitoring ? "text-emerald-400" : "text-neutral-500"}`}>
+              {isLiveMonitoring ? "Active (8s)" : "Paused"}
+            </span>
           </div>
         </div>
       </aside>
@@ -451,7 +654,7 @@ export default function Dashboard() {
             <div className="flex items-center gap-2 text-xs text-neutral-400">
               <span>Operations</span>
               <span>/</span>
-              <span className="text-neutral-100 font-medium">B2B MSME Purchase Orders & Grounded Assistant</span>
+              <span className="text-neutral-100 font-medium">B2B Continuous Risk Intelligence & Live Feed</span>
             </div>
             <Badge variant="outline" className="hidden sm:inline-flex text-[10px] border-neutral-700 text-neutral-400">
               Color Rules: <span className="text-red-500 mx-1 font-bold">Red (High)</span> | <span className="text-amber-500 mx-1 font-bold">Amber (Med)</span> | <span className="text-green-500 mx-1 font-bold">Green (Low)</span>
@@ -459,6 +662,21 @@ export default function Dashboard() {
           </div>
 
           <div className="flex items-center gap-2.5">
+            {/* Live Monitoring Toggle in Topbar */}
+            <Button
+              variant={isLiveMonitoring ? "default" : "outline"}
+              size="sm"
+              onClick={() => setIsLiveMonitoring(!isLiveMonitoring)}
+              className={`h-8 text-xs font-semibold flex items-center gap-1.5 ${
+                isLiveMonitoring
+                  ? "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-500"
+                  : "border-neutral-700 bg-neutral-900 text-neutral-200 hover:bg-neutral-800"
+              }`}
+            >
+              <Radio className={`w-3.5 h-3.5 ${isLiveMonitoring ? "animate-pulse text-white" : "text-neutral-400"}`} />
+              {isLiveMonitoring ? "Live Monitoring (Active)" : "Start Live Monitoring"}
+            </Button>
+
             <Button
               variant="outline"
               size="sm"
@@ -470,25 +688,25 @@ export default function Dashboard() {
               className="h-8 text-xs border-neutral-700 bg-neutral-900 text-neutral-200 hover:bg-neutral-800"
             >
               <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${loading ? "animate-spin" : ""}`} />
-              Refresh Orders
+              Sync Orders
             </Button>
             <Dialog>
               <DialogTrigger render={<Button size="sm" className="h-8 text-xs bg-neutral-100 text-neutral-900 hover:bg-neutral-200">System Architecture</Button>} />
               <DialogContent className="bg-neutral-900 border-neutral-800 text-neutral-100">
                 <DialogHeader>
-                  <DialogTitle className="text-base font-bold">POST /api/ask Grounded Intelligence</DialogTitle>
+                  <DialogTitle className="text-base font-bold">SentinelChain Continuous Watch System</DialogTitle>
                   <DialogDescription className="text-neutral-400 text-xs">
-                    Natural language Q&A strictly grounded in indexed ChromaDB vector intelligence.
+                    Autonomous multi-agent risk synthesis engine with live streaming telemetry.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-3 py-2 text-xs border-y border-neutral-800 text-neutral-300">
                   <div className="p-2.5 bg-neutral-950 rounded border border-neutral-800 space-y-1">
-                    <strong className="text-neutral-100 block">Strict Grounding</strong>
-                    <p className="text-neutral-400">Gemini generates answers strictly based on retrieved vector documents with zero external hallucination.</p>
+                    <strong className="text-neutral-100 block">Live Disruption Ingestion</strong>
+                    <p className="text-neutral-400">Pulls realistic disruption scenarios (cyclones, tariffs, port strikes, manufacturing outages) every 8-10 seconds.</p>
                   </div>
                   <div className="p-2.5 bg-neutral-950 rounded border border-neutral-800 space-y-1">
-                    <strong className="text-neutral-100 block">Labeled Citations</strong>
-                    <p className="text-neutral-400">All responses trace back to specific document notices like [DOC-LOG-2026-11] or [DOC-WX-2026-08].</p>
+                    <strong className="text-neutral-100 block">Dynamic Orchestrator Re-evaluation</strong>
+                    <p className="text-neutral-400">Matching orders are re-scored live and their badges adapt in real time across the dashboard.</p>
                   </div>
                 </div>
                 <DialogFooter>
@@ -532,11 +750,15 @@ export default function Dashboard() {
 
             <TremorCard decoration="top" decorationColor="indigo" className="bg-neutral-900 border-neutral-800 text-neutral-100 ring-0 p-4">
               <Flex justifyContent="between" alignItems="center">
-                <Text className="text-neutral-400 text-xs">Total Active MSME Orders</Text>
-                <BadgeDelta deltaType="moderateIncrease" className="text-xs">Live API</BadgeDelta>
+                <Text className="text-neutral-400 text-xs">Live Risk Feed Status</Text>
+                <Activity className={`w-4 h-4 ${isLiveMonitoring ? "text-emerald-400 animate-pulse" : "text-neutral-500"}`} />
               </Flex>
-              <Metric className="text-neutral-100 text-2xl font-bold mt-1">{orders.length} Orders</Metric>
-              <ProgressBar value={100} color="indigo" className="mt-3" />
+              <Metric className="text-neutral-100 text-2xl font-bold mt-1">
+                {isLiveMonitoring ? "Continuous" : "Standby"}
+              </Metric>
+              <Text className="text-neutral-400 text-xs mt-2">
+                {feedEvents.length} Events Detected in Session
+              </Text>
             </TremorCard>
           </Grid>
 
@@ -562,14 +784,14 @@ export default function Dashboard() {
                 </div>
                 <div className="flex items-center gap-2 text-[11px] text-neutral-400">
                   <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                  Grounded in 5 Vector Documents
+                  Grounded in Vector DB Notices
                 </div>
               </div>
             </CardHeader>
 
             <CardContent className="p-4 space-y-4">
               {/* Chat Messages Stream */}
-              <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+              <div className="space-y-3 max-h-56 overflow-y-auto pr-1">
                 {chatMessages.map((msg) => (
                   <div
                     key={msg.id}
@@ -688,15 +910,15 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* Filter Bar & Header */}
+          {/* Filter Bar & MSME Orders Section Header */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2">
             <div>
               <h2 className="text-lg font-bold text-neutral-100 flex items-center gap-2">
                 <Box className="w-5 h-5 text-neutral-400" />
-                MSME Purchase Orders
+                Live MSME Purchase Orders Matrix
               </h2>
               <p className="text-xs text-neutral-400">
-                Click any order card to inspect live multi-agent risk telemetry, ChromaDB vector matches, and Gemini analysis
+                Continuous risk re-evaluation dynamically updates card severity badges and scores
               </p>
             </div>
 
@@ -751,7 +973,7 @@ export default function Dashboard() {
                 <Card
                   key={order.id}
                   onClick={() => router.push(`/orders/${order.id}`)}
-                  className={`bg-neutral-900 border-neutral-800 text-neutral-100 flex flex-col justify-between cursor-pointer transition-all duration-200 hover:shadow-lg hover:shadow-neutral-950/50 hover:-translate-y-0.5 ${borderHighlight} group`}
+                  className={`bg-neutral-900 border-neutral-800 text-neutral-100 flex flex-col justify-between cursor-pointer transition-all duration-300 hover:shadow-lg hover:shadow-neutral-950/50 hover:-translate-y-0.5 ${borderHighlight} group relative`}
                 >
                   <CardHeader className="pb-3 space-y-2">
                     {/* Top Row: Order ID + Risk Badge */}
@@ -843,6 +1065,81 @@ export default function Dashboard() {
               );
             })}
           </div>
+
+          {/* Live Scrolling Activity Feed at Bottom of Dashboard */}
+          <Card className="bg-neutral-900 border-neutral-800 text-neutral-100">
+            <CardHeader className="pb-3 border-b border-neutral-800/80">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-emerald-400" />
+                  <CardTitle className="text-sm font-bold">
+                    Live Disruption Activity Feed ({feedEvents.length} Events Detected)
+                  </CardTitle>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] font-mono ${
+                      isLiveMonitoring ? "border-emerald-700 text-emerald-400 bg-emerald-950/40" : "border-neutral-700 text-neutral-500"
+                    }`}
+                  >
+                    {isLiveMonitoring ? "● CONTINUOUS STREAMING" : "○ STREAMING PAUSED"}
+                  </Badge>
+                </div>
+              </div>
+              <CardDescription className="text-xs text-neutral-400">
+                Timestamped telemetry log of vector-matched weather alerts, tariff notices, port strikes, and supplier delays
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent className="p-4">
+              <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
+                {feedEvents.map((evt) => (
+                  <div
+                    key={evt.id}
+                    className="p-3 rounded-lg bg-neutral-950 border border-neutral-800/80 hover:border-neutral-700 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs"
+                  >
+                    <div className="space-y-1 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono text-[11px] text-neutral-500 font-semibold">
+                          [{evt.time_str}]
+                        </span>
+                        <span className="font-bold text-neutral-200">
+                          {evt.title}
+                        </span>
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] border-neutral-700 text-neutral-400 bg-neutral-900 py-0"
+                        >
+                          {evt.category}
+                        </Badge>
+                      </div>
+                      <p className="text-[11px] text-neutral-400 leading-relaxed">
+                        {evt.content_snippet}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-3 shrink-0 self-start md:self-center">
+                      {evt.target_orders && evt.target_orders.length > 0 && (
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] text-neutral-500">Target:</span>
+                          {evt.target_orders.map((tId) => (
+                            <Badge
+                              key={tId}
+                              className="bg-neutral-800 border border-neutral-700 text-neutral-200 font-mono text-[10px] px-1.5 py-0"
+                            >
+                              {tId}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                      {getRiskBadge(evt.severity)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </main>
     </div>
