@@ -20,6 +20,11 @@ def get_gemini_api_key() -> Optional[str]:
     return os.getenv("GEMINI_API_KEY")
 
 
+def get_gemini_model_name() -> str:
+    """Retrieves configured Gemini model name from environment, defaulting to free-tier gemini-2.0-flash."""
+    return os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+
+
 def generate_risk_explanation(
     order: Dict[str, Any],
     orchestrator_result: Dict[str, Any],
@@ -112,11 +117,12 @@ OUTPUT INSTRUCTIONS:
     # 3. Call Gemini if API Key is configured
     explanation_text = None
     if api_key and api_key.strip():
+        model_name = get_gemini_model_name()
         try:
             from google import genai
             client = genai.Client(api_key=api_key.strip())
             response = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model=model_name,
                 contents=prompt,
             )
             if response and response.text:
@@ -125,7 +131,7 @@ OUTPUT INSTRUCTIONS:
             try:
                 import google.generativeai as legacy_genai
                 legacy_genai.configure(api_key=api_key.strip())
-                model = legacy_genai.GenerativeModel("gemini-1.5-flash")
+                model = legacy_genai.GenerativeModel(model_name if "1.5" in model_name else "gemini-1.5-flash")
                 resp = model.generate_content(prompt)
                 if resp and resp.text:
                     explanation_text = resp.text.strip()
@@ -202,11 +208,12 @@ INSTRUCTIONS:
 
     answer_text = None
     if api_key and api_key.strip():
+        model_name = get_gemini_model_name()
         try:
             from google import genai
             client = genai.Client(api_key=api_key.strip())
             response = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model=model_name,
                 contents=grounding_prompt,
             )
             if response and response.text:
@@ -215,7 +222,7 @@ INSTRUCTIONS:
             try:
                 import google.generativeai as legacy_genai
                 legacy_genai.configure(api_key=api_key.strip())
-                model = legacy_genai.GenerativeModel("gemini-1.5-flash")
+                model = legacy_genai.GenerativeModel(model_name if "1.5" in model_name else "gemini-1.5-flash")
                 resp = model.generate_content(grounding_prompt)
                 if resp and resp.text:
                     answer_text = resp.text.strip()
