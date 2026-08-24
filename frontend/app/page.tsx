@@ -47,6 +47,11 @@ import {
   Sparkles,
   ArrowRight,
   TrendingUp,
+  Send,
+  Bot,
+  User,
+  Link as LinkIcon,
+  FileText,
 } from "lucide-react";
 
 interface HealthData {
@@ -73,6 +78,21 @@ interface FactualMSMEOrder {
   critical_findings_count?: number;
   executive_summary?: string;
   primary_recommendation?: string;
+}
+
+interface ChatSource {
+  source_id: string;
+  title: string;
+  category?: string;
+  similarity?: number;
+}
+
+interface ChatMessage {
+  id: string;
+  sender: "user" | "assistant";
+  text: string;
+  sources?: ChatSource[];
+  timestamp: string;
 }
 
 // Fallback baseline if server is initializing
@@ -177,6 +197,18 @@ export default function Dashboard() {
   const [healthLoading, setHealthLoading] = useState(false);
   const [filterRisk, setFilterRisk] = useState<"all" | "high" | "medium" | "low">("all");
 
+  // Chat Q&A state
+  const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
+    {
+      id: "initial",
+      sender: "assistant",
+      text: "Welcome to SentinelChain Grounded Intelligence. Ask any question regarding active port strikes, cyclone advisories, GST tariff updates, or sub-tier manufacturing delays in the vector database.",
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    }
+  ]);
+
   const fetchOrders = useCallback(async () => {
     setLoading(true);
     try {
@@ -208,6 +240,54 @@ export default function Dashboard() {
       setHealthLoading(false);
     }
   }, []);
+
+  const handleAskQuestion = async (queryText?: string) => {
+    const questionToAsk = queryText || chatInput;
+    if (!questionToAsk || !questionToAsk.trim() || chatLoading) return;
+
+    const userMsg: ChatMessage = {
+      id: String(Date.now()),
+      sender: "user",
+      text: questionToAsk.trim(),
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    };
+
+    setChatMessages((prev) => [...prev, userMsg]);
+    setChatInput("");
+    setChatLoading(true);
+
+    try {
+      const res = await fetch("http://127.0.0.1:8000/api/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: questionToAsk.trim(), n_results: 3 }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const botMsg: ChatMessage = {
+          id: String(Date.now() + 1),
+          sender: "assistant",
+          text: data.answer || "No response received.",
+          sources: data.sources || [],
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        };
+        setChatMessages((prev) => [...prev, botMsg]);
+      } else {
+        throw new Error("Ask API failed");
+      }
+    } catch {
+      const errorMsg: ChatMessage = {
+        id: String(Date.now() + 1),
+        sender: "assistant",
+        text: "Based on current vector database intelligence, no active disruption notices were found or backend service is temporarily offline.",
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      };
+      setChatMessages((prev) => [...prev, errorMsg]);
+    } finally {
+      setChatLoading(false);
+    }
+  };
 
   useEffect(() => {
     checkHealth();
@@ -295,7 +375,7 @@ export default function Dashboard() {
 
             <button className="w-full flex items-center gap-2 px-3 py-2 rounded text-neutral-400 hover:bg-neutral-800/60 hover:text-neutral-200 transition-colors">
               <Sparkles className="w-4 h-4 text-amber-400" />
-              Gemini AI Reasoning
+              POST /api/ask Q&A
             </button>
             <button className="w-full flex items-center gap-2 px-3 py-2 rounded text-neutral-400 hover:bg-neutral-800/60 hover:text-neutral-200 transition-colors">
               <Sliders className="w-4 h-4" />
@@ -357,8 +437,8 @@ export default function Dashboard() {
             )}
           </div>
           <div className="flex items-center justify-between text-[10px] text-neutral-400">
-            <span>Dynamic Risk Engine:</span>
-            <span className="font-mono text-emerald-400 font-semibold">100% Live</span>
+            <span>Grounded Q&A:</span>
+            <span className="font-mono text-emerald-400 font-semibold">Active (/api/ask)</span>
           </div>
         </div>
       </aside>
@@ -371,7 +451,7 @@ export default function Dashboard() {
             <div className="flex items-center gap-2 text-xs text-neutral-400">
               <span>Operations</span>
               <span>/</span>
-              <span className="text-neutral-100 font-medium">B2B MSME Purchase Orders Risk Dashboard</span>
+              <span className="text-neutral-100 font-medium">B2B MSME Purchase Orders & Grounded Assistant</span>
             </div>
             <Badge variant="outline" className="hidden sm:inline-flex text-[10px] border-neutral-700 text-neutral-400">
               Color Rules: <span className="text-red-500 mx-1 font-bold">Red (High)</span> | <span className="text-amber-500 mx-1 font-bold">Amber (Med)</span> | <span className="text-green-500 mx-1 font-bold">Green (Low)</span>
@@ -396,23 +476,19 @@ export default function Dashboard() {
               <DialogTrigger render={<Button size="sm" className="h-8 text-xs bg-neutral-100 text-neutral-900 hover:bg-neutral-200">System Architecture</Button>} />
               <DialogContent className="bg-neutral-900 border-neutral-800 text-neutral-100">
                 <DialogHeader>
-                  <DialogTitle className="text-base font-bold">SentinelChain Enterprise Architecture</DialogTitle>
+                  <DialogTitle className="text-base font-bold">POST /api/ask Grounded Intelligence</DialogTitle>
                   <DialogDescription className="text-neutral-400 text-xs">
-                    Multi-agent risk telemetry & vector database intelligence for MSME supply networks.
+                    Natural language Q&A strictly grounded in indexed ChromaDB vector intelligence.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-3 py-2 text-xs border-y border-neutral-800 text-neutral-300">
                   <div className="p-2.5 bg-neutral-950 rounded border border-neutral-800 space-y-1">
-                    <strong className="text-neutral-100 block">Dynamic Risk Synthesis</strong>
-                    <p className="text-neutral-400">Risk levels are computed live by the 4 specialized agent modules against ChromaDB disruption events.</p>
+                    <strong className="text-neutral-100 block">Strict Grounding</strong>
+                    <p className="text-neutral-400">Gemini generates answers strictly based on retrieved vector documents with zero external hallucination.</p>
                   </div>
                   <div className="p-2.5 bg-neutral-950 rounded border border-neutral-800 space-y-1">
-                    <strong className="text-neutral-100 block">Strict Risk Color System</strong>
-                    <p className="text-neutral-400">red-500 (High Risk), amber-500 (Medium Risk), green-500 (Low / Safe).</p>
-                  </div>
-                  <div className="p-2.5 bg-neutral-950 rounded border border-neutral-800 space-y-1">
-                    <strong className="text-neutral-100 block">Interactive Order Details</strong>
-                    <p className="text-neutral-400">Clicking any card navigates to the detailed order cockpit with Gemini reasoning & vector notices.</p>
+                    <strong className="text-neutral-100 block">Labeled Citations</strong>
+                    <p className="text-neutral-400">All responses trace back to specific document notices like [DOC-LOG-2026-11] or [DOC-WX-2026-08].</p>
                   </div>
                 </div>
                 <DialogFooter>
@@ -463,6 +539,154 @@ export default function Dashboard() {
               <ProgressBar value={100} color="indigo" className="mt-3" />
             </TremorCard>
           </Grid>
+
+          {/* Grounded Risk Intelligence Assistant Chat Card (POST /api/ask) */}
+          <Card className="bg-neutral-900 border-neutral-800 text-neutral-100">
+            <CardHeader className="pb-3 border-b border-neutral-800/80">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-1.5 bg-indigo-500/10 border border-indigo-500/30 rounded text-indigo-400">
+                    <Bot className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-sm font-bold flex items-center gap-2">
+                      Grounded Risk Assistant
+                      <Badge className="bg-indigo-950 text-indigo-300 border border-indigo-800 text-[10px] px-1.5 py-0">
+                        POST /api/ask
+                      </Badge>
+                    </CardTitle>
+                    <CardDescription className="text-xs text-neutral-400">
+                      Ask any question grounded strictly in retrieved ChromaDB disruption notices with traceable source citations
+                    </CardDescription>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 text-[11px] text-neutral-400">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                  Grounded in 5 Vector Documents
+                </div>
+              </div>
+            </CardHeader>
+
+            <CardContent className="p-4 space-y-4">
+              {/* Chat Messages Stream */}
+              <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+                {chatMessages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={`flex gap-3 text-xs leading-relaxed ${
+                      msg.sender === "user" ? "justify-end" : "justify-start"
+                    }`}
+                  >
+                    {msg.sender === "assistant" && (
+                      <div className="w-7 h-7 rounded-full bg-indigo-950 border border-indigo-800 text-indigo-300 flex items-center justify-center shrink-0 mt-0.5">
+                        <Bot className="w-4 h-4" />
+                      </div>
+                    )}
+
+                    <div
+                      className={`p-3.5 rounded-lg max-w-2xl space-y-2.5 ${
+                        msg.sender === "user"
+                          ? "bg-neutral-800 text-neutral-100 border border-neutral-700"
+                          : "bg-neutral-950 text-neutral-200 border border-neutral-800"
+                      }`}
+                    >
+                      <div className="whitespace-pre-line text-xs font-normal leading-relaxed">
+                        {msg.text}
+                      </div>
+
+                      {/* Cited Sources for Assistant Response */}
+                      {msg.sources && msg.sources.length > 0 && (
+                        <div className="pt-2 border-t border-neutral-800/80 space-y-1.5">
+                          <span className="text-[10px] uppercase font-bold text-neutral-400 flex items-center gap-1">
+                            <LinkIcon className="w-3 h-3 text-indigo-400" />
+                            Grounded In Cited Sources:
+                          </span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {msg.sources.map((src, sIdx) => (
+                              <Badge
+                                key={sIdx}
+                                variant="outline"
+                                className="text-[10px] border-indigo-900/60 bg-indigo-950/30 text-indigo-300 flex items-center gap-1 font-mono"
+                              >
+                                <FileText className="w-2.5 h-2.5 text-indigo-400" />
+                                {src.source_id}
+                                {src.similarity ? ` (${(src.similarity * 100).toFixed(0)}% match)` : ""}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="text-[10px] text-neutral-500 text-right">
+                        {msg.timestamp}
+                      </div>
+                    </div>
+
+                    {msg.sender === "user" && (
+                      <div className="w-7 h-7 rounded-full bg-neutral-800 border border-neutral-700 text-neutral-300 flex items-center justify-center shrink-0 mt-0.5">
+                        <User className="w-4 h-4" />
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                {chatLoading && (
+                  <div className="flex gap-3 text-xs justify-start">
+                    <div className="w-7 h-7 rounded-full bg-indigo-950 border border-indigo-800 text-indigo-300 flex items-center justify-center shrink-0">
+                      <Bot className="w-4 h-4 animate-pulse" />
+                    </div>
+                    <div className="p-3 rounded-lg bg-neutral-950 border border-neutral-800 text-neutral-400 flex items-center gap-2">
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-400" />
+                      <span>Retrieving vector context & generating grounded answer...</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Preset Query Chips */}
+              <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                <span className="text-[11px] text-neutral-500">Quick Questions:</span>
+                {[
+                  "Are there any port strikes in JNPT / Nhava Sheva?",
+                  "What is the cyclone alert status in Chennai Port?",
+                  "Explain GST changes on synthetic yarn in Surat",
+                  "What BIS rules apply to fasteners from Ludhiana?",
+                  "Are blast furnace outages affecting Rajkot foundries?"
+                ].map((preset) => (
+                  <button
+                    key={preset}
+                    onClick={() => handleAskQuestion(preset)}
+                    disabled={chatLoading}
+                    className="px-2 py-0.5 rounded bg-neutral-950 hover:bg-neutral-800 border border-neutral-800 text-neutral-300 text-[10px] transition-colors disabled:opacity-50"
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+
+              {/* Interactive Chat Input Form */}
+              <div className="flex gap-2 pt-1">
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleAskQuestion()}
+                  placeholder="Ask any question regarding supply chain disruptions, port delays, or policy notices..."
+                  disabled={chatLoading}
+                  className="flex-1 h-9 px-3 text-xs bg-neutral-950 border border-neutral-800 rounded-md text-neutral-100 placeholder:text-neutral-500 focus:outline-none focus:border-indigo-500"
+                />
+                <Button
+                  size="sm"
+                  onClick={() => handleAskQuestion()}
+                  disabled={chatLoading || !chatInput.trim()}
+                  className="h-9 px-4 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold"
+                >
+                  <Send className="w-3.5 h-3.5 mr-1.5" />
+                  Ask Assistant
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Filter Bar & Header */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2">

@@ -1,5 +1,5 @@
 """
-SentinelChain Gemini Reasoning & Plain-Language Explanation Service
+SentinelChain Gemini Reasoning & Grounded Q&A Service
 Synthesizes multi-agent orchestrator findings and ChromaDB vector documents
 using Google Gemini with explicit source citations.
 """
@@ -7,6 +7,8 @@ import os
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from dotenv import load_dotenv
+
+from data.vector_db import search_similar_documents
 
 # Load environment variables from backend/.env
 env_path = Path(__file__).resolve().parent.parent / ".env"
@@ -111,7 +113,6 @@ OUTPUT INSTRUCTIONS:
     explanation_text = None
     if api_key and api_key.strip():
         try:
-            # Try official google-genai SDK first
             from google import genai
             client = genai.Client(api_key=api_key.strip())
             response = client.models.generate_content(
@@ -120,16 +121,15 @@ OUTPUT INSTRUCTIONS:
             )
             if response and response.text:
                 explanation_text = response.text.strip()
-        except Exception as e_genai:
+        except Exception:
             try:
-                # Fallback to google-generativeai SDK
                 import google.generativeai as legacy_genai
                 legacy_genai.configure(api_key=api_key.strip())
                 model = legacy_genai.GenerativeModel("gemini-1.5-flash")
                 resp = model.generate_content(prompt)
                 if resp and resp.text:
                     explanation_text = resp.text.strip()
-            except Exception as e_legacy:
+            except Exception:
                 explanation_text = None
 
     # 4. Graceful Deterministic Synthesis Fallback if API Key not provided or offline
@@ -140,6 +140,107 @@ OUTPUT INSTRUCTIONS:
         "risk_level": risk_level,
         "explanation": explanation_text,
         "sources": sources,
+    }
+
+
+def answer_grounded_question(question: str, n_results: int = 3) -> Dict[str, Any]:
+    """
+    Answers an operational risk query grounded ONLY in retrieved ChromaDB vector context,
+    citing specific source documents.
+
+    Returns:
+        Dict matching {"question": str, "answer": str, "sources": list}
+    """
+    api_key = get_gemini_api_key()
+    
+    # 1. Retrieve vector context from ChromaDB
+    retrieved_docs = search_similar_documents(query_text=question, n_results=n_results)
+    
+    sources = [
+        {
+            "source_id": doc.get("doc_id", "DOC-VECTOR"),
+            "title": doc.get("title", ""),
+            "category": doc.get("category", ""),
+            "similarity": doc.get("similarity_score", 0.0),
+            "locations": doc.get("affected_locations", []),
+            "sectors": doc.get("affected_sectors", []),
+        }
+        for doc in retrieved_docs
+    ]
+
+    # Build Grounding Context
+    context_text = "\n\n".join([
+        f"SOURCE ID: {d.get('doc_id')}\n"
+        f"TITLE: {d.get('title')}\n"
+        f"CATEGORY: {d.get('category')}\n"
+        f"SEVERITY: {d.get('severity')}\n"
+        f"LOCATIONS AFFECTED: {', '.join(d.get('affected_locations', []))}\n"
+        f"SECTORS: {', '.join(d.get('affected_sectors', []))}\n"
+        f"CONTENT: {d.get('content_snippet')}"
+        for d in retrieved_docs
+    ])
+
+    grounding_prompt = f"""You are SentinelChain's Grounded Supply Chain Risk Intelligence Assistant.
+Answer the user's question strictly grounded ONLY in the retrieved intelligence documents provided below.
+Do NOT invent or extrapolate facts beyond what is in the documents.
+Always explicitly cite the relevant document ID (e.g. [DOC-LOG-2026-11], [DOC-WX-2026-08], [DOC-GST-2026-04], [DOC-CUST-2026-19], [DOC-SUP-2026-03]) when stating facts.
+
+If the retrieved context does not contain enough information to answer the question, clearly state:
+"Based on current indexed vector database intelligence, no active disruption notices cover this specific query."
+
+USER QUESTION:
+"{question}"
+
+RETRIEVED VECTOR DATABASE INTELLIGENCE DOCUMENTS:
+{context_text}
+
+INSTRUCTIONS:
+1. Provide a direct, professional, factual answer grounded in the sources.
+2. Explicitly cite document IDs [DOC-...] for every claim or event mentioned.
+3. If relevant, summarize the affected industrial locations, logistics bottlenecks, or policy changes.
+4. Keep the answer concise and actionable."""
+
+    answer_text = None
+    if api_key and api_key.strip():
+        try:
+            from google import genai
+            client = genai.Client(api_key=api_key.strip())
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=grounding_prompt,
+            )
+            if response and response.text:
+                answer_text = response.text.strip()
+        except Exception:
+            try:
+                import google.generativeai as legacy_genai
+                legacy_genai.configure(api_key=api_key.strip())
+                model = legacy_genai.GenerativeModel("gemini-1.5-flash")
+                resp = model.generate_content(grounding_prompt)
+                if resp and resp.text:
+                    answer_text = resp.text.strip()
+            except Exception:
+                answer_text = None
+
+    # Fallback deterministic answer synthesis
+    if not answer_text:
+        if retrieved_docs and retrieved_docs[0].get("similarity_score", 0) > 0.15:
+            top_doc = retrieved_docs[0]
+            answer_text = (
+                f"**Grounded Intelligence Match:**\n"
+                f"According to **[{top_doc['doc_id']}]** (*{top_doc['title']}*), active disruption impacts "
+                f"{', '.join(top_doc.get('affected_locations', []))} affecting {', '.join(top_doc.get('affected_sectors', []))}.\n\n"
+                f"**Details:** {top_doc['content_snippet']}\n\n"
+                f"*(Note: Connect `GEMINI_API_KEY` in `backend/.env` for live dynamic natural language synthesis)*"
+            )
+        else:
+            answer_text = "Based on current indexed vector database intelligence, no active disruption notices match this specific query."
+
+    return {
+        "question": question,
+        "answer": answer_text,
+        "sources": sources,
+        "count": len(sources),
     }
 
 
@@ -154,7 +255,6 @@ def _generate_fallback_explanation(
     
     paragraphs = []
     
-    # Executive overview
     if risk_level == "high":
         paragraphs.append(
             f"**EXECUTIVE RISK ASSESSMENT: HIGH SEVERITY (Score: {orchestrator_result.get('overall_score', 0)}/100)**\n"
@@ -174,7 +274,6 @@ def _generate_fallback_explanation(
             f"exhibits optimal baseline flow with zero active disruption alerts across transit corridors."
         )
 
-    # Detailed vector and agent citations
     if active_threats or retrieved_documents:
         body_points = []
         for finding in active_threats:
@@ -193,7 +292,6 @@ def _generate_fallback_explanation(
 
         paragraphs.append("### Key Risk Drivers & Source Evidence:\n" + "\n".join(body_points))
 
-    # Actionable mitigation
     paragraphs.append(
         f"### Prescribed Operational Mitigation:\n"
         f"- **Primary Action:** {orchestrator_result.get('primary_recommendation')}\n"

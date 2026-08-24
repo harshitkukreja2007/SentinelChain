@@ -26,7 +26,11 @@ from data.vector_db import (
     search_similar_documents,
     query_disruptions_for_order,
 )
-from services.gemini_service import generate_risk_explanation, get_gemini_api_key
+from services.gemini_service import (
+    generate_risk_explanation,
+    answer_grounded_question,
+    get_gemini_api_key,
+)
 
 # Registry of specialized agents
 AGENT_REGISTRY = {
@@ -92,20 +96,22 @@ class AnalyzeOrderRequest(BaseModel):
     order: Optional[Dict[str, Any]] = Field(default=None, description="Optional full factual order payload")
 
 
-class SourceCitation(BaseModel):
-    source_id: str
-    title: str
-    type: str
-    category: Optional[str] = None
-    similarity: Optional[float] = None
-    confidence: Optional[float] = None
-    matched_doc: Optional[str] = None
-
-
 class AnalyzeResponse(BaseModel):
     risk_level: str = Field(..., description="Computed overall risk level: high | medium | low")
     explanation: str = Field(..., description="Plain-language explanation citing evidence and sources")
     sources: List[Dict[str, Any]] = Field(default_factory=list, description="Referenced intelligence sources")
+
+
+class AskQuestionRequest(BaseModel):
+    question: str = Field(..., min_length=1, description="Question string regarding supply chain risks or policy")
+    n_results: int = Field(default=3, ge=1, le=10, description="Number of vector context documents to retrieve")
+
+
+class AskQuestionResponse(BaseModel):
+    question: str = Field(..., description="Original user query")
+    answer: str = Field(..., description="Grounded response synthesized by Gemini")
+    sources: List[Dict[str, Any]] = Field(default_factory=list, description="Retrieved vector context documents")
+    count: int = Field(default=0, description="Count of cited sources")
 
 
 # ==========================================
@@ -125,6 +131,7 @@ def read_root():
             "/api/risk/evaluate",
             "/api/risk/evaluate/{order_id}",
             "/api/analyze",
+            "/api/ask",
         ],
     }
 
@@ -140,6 +147,65 @@ def health_check():
         vector_db_documents=doc_count,
         gemini_configured=bool(get_gemini_api_key()),
     )
+
+
+# ==========================================
+# Grounded Q&A Assistant: POST /api/ask
+# ==========================================
+@app.post("/api/ask", response_model=AskQuestionResponse, tags=["Grounded Q&A"])
+def ask_risk_assistant(payload: AskQuestionRequest):
+    """
+    Takes a question string, retrieves relevant context from the ChromaDB vector database,
+    and calls the LLM (Gemini) to answer strictly grounded ONLY in that context, citing sources.
+    """
+    if not payload.question or not payload.question.strip():
+        raise HTTPException(status_code=400, detail="Question cannot be empty.")
+
+    result = answer_grounded_question(
+        question=payload.question.strip(),
+        n_results=payload.n_results,
+    )
+    return AskQuestionResponse(**result)
+
+
+# ==========================================
+# Gemini Reasoning Endpoint: POST /api/analyze
+# ==========================================
+@app.post("/api/analyze", response_model=AnalyzeResponse, tags=["Gemini Analysis"])
+def analyze_order(payload: AnalyzeOrderRequest):
+    """
+    Takes an order ID, executes the multi-agent orchestrator, performs vector similarity search
+    against ChromaDB for related documents, and prompts Gemini to produce a plain-language
+    explanation citing specific sources.
+    """
+    target_id = payload.order_id or payload.id
+    order_data = None
+
+    if target_id:
+        order_data = get_order_by_id(target_id)
+        if not order_data and not payload.order:
+            raise HTTPException(status_code=404, detail=f"Order '{target_id}' not found in MSME dataset.")
+
+    if not order_data:
+        if payload.order:
+            order_data = payload.order
+        else:
+            raise HTTPException(status_code=400, detail="Must provide 'order_id' or full 'order' object.")
+
+    # 1. Run through Multi-Agent Orchestrator
+    orchestrator_assessment = orchestrator.run_all_agents(order_data)
+
+    # 2. Similarity search against Vector DB
+    retrieved_documents = query_disruptions_for_order(order_data, n_results=3)
+
+    # 3. Call Gemini Reasoning Service
+    result = generate_risk_explanation(
+        order=order_data,
+        orchestrator_result=orchestrator_assessment,
+        retrieved_documents=retrieved_documents,
+    )
+
+    return AnalyzeResponse(**result)
 
 
 # ==========================================
@@ -207,46 +273,6 @@ def get_order_disruptions(order_id: str, n_results: int = Query(2, ge=1, le=5)):
         "item": order["item"],
         "matched_disruptions": disruptions,
     }
-
-
-# ==========================================
-# Gemini Reasoning Endpoint: POST /api/analyze
-# ==========================================
-@app.post("/api/analyze", response_model=AnalyzeResponse, tags=["Gemini Analysis"])
-def analyze_order(payload: AnalyzeOrderRequest):
-    """
-    Takes an order ID, executes the multi-agent orchestrator, performs vector similarity search
-    against ChromaDB for related documents, and prompts Gemini to produce a plain-language
-    explanation citing specific sources.
-    """
-    target_id = payload.order_id or payload.id
-    order_data = None
-
-    if target_id:
-        order_data = get_order_by_id(target_id)
-        if not order_data and not payload.order:
-            raise HTTPException(status_code=404, detail=f"Order '{target_id}' not found in MSME dataset.")
-
-    if not order_data:
-        if payload.order:
-            order_data = payload.order
-        else:
-            raise HTTPException(status_code=400, detail="Must provide 'order_id' or full 'order' object.")
-
-    # 1. Run through Multi-Agent Orchestrator
-    orchestrator_assessment = orchestrator.run_all_agents(order_data)
-
-    # 2. Similarity search against Vector DB
-    retrieved_documents = query_disruptions_for_order(order_data, n_results=3)
-
-    # 3. Call Gemini Reasoning Service
-    result = generate_risk_explanation(
-        order=order_data,
-        orchestrator_result=orchestrator_assessment,
-        retrieved_documents=retrieved_documents,
-    )
-
-    return AnalyzeResponse(**result)
 
 
 # ==========================================
