@@ -55,13 +55,19 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Enable CORS for local development
+# Enable CORS for Next.js frontend on localhost:3000 and 127.0.0.1:3000
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 
@@ -137,6 +143,73 @@ def health_check():
 
 
 # ==========================================
+# MSME Orders Endpoints (Factual Data + Live Dynamic Assessment)
+# ==========================================
+@app.get("/api/orders", tags=["Orders"])
+def list_orders(include_live_risk: bool = Query(True, description="Compute live risk level via orchestrator")):
+    """
+    Returns all 6 realistic Indian MSME supply orders with their current dynamic risk level.
+    """
+    raw_orders = get_all_orders()
+    if not include_live_risk:
+        return {"orders": raw_orders, "count": len(raw_orders)}
+
+    enriched_orders = []
+    for order in raw_orders:
+        assessment = orchestrator.run_all_agents(order)
+        enriched_orders.append({
+            **order,
+            "riskLevel": assessment["riskLevel"],
+            "overall_risk_level": assessment["overall_risk_level"],
+            "risk_status": assessment.get("risk_status", "No Active Risk"),
+            "overall_score": assessment["overall_score"],
+            "critical_findings_count": assessment["critical_findings_count"],
+            "executive_summary": assessment["executive_summary"],
+            "primary_recommendation": assessment["primary_recommendation"],
+            "findings": assessment["findings"],
+        })
+
+    return {"orders": enriched_orders, "count": len(enriched_orders)}
+
+
+@app.get("/api/orders/{order_id}", tags=["Orders"])
+def get_order(order_id: str):
+    """Fetches a specific factual MSME order by ID with its dynamic risk assessment."""
+    order = get_order_by_id(order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail=f"Order '{order_id}' not found.")
+    assessment = orchestrator.run_all_agents(order)
+    return {
+        **order,
+        "riskLevel": assessment["riskLevel"],
+        "overall_risk_level": assessment["overall_risk_level"],
+        "risk_status": assessment.get("risk_status", "No Active Risk"),
+        "overall_score": assessment["overall_score"],
+        "critical_findings_count": assessment["critical_findings_count"],
+        "executive_summary": assessment["executive_summary"],
+        "primary_recommendation": assessment["primary_recommendation"],
+        "findings": assessment["findings"],
+    }
+
+
+@app.get("/api/orders/{order_id}/disruptions", tags=["Orders"])
+def get_order_disruptions(order_id: str, n_results: int = Query(2, ge=1, le=5)):
+    """
+    Performs ChromaDB vector similarity search to find matching disruption notices for an order.
+    """
+    order = get_order_by_id(order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail=f"Order '{order_id}' not found.")
+    disruptions = query_disruptions_for_order(order, n_results=n_results)
+    return {
+        "order_id": order_id,
+        "supplier_location": order["supplier_location"],
+        "item": order["item"],
+        "matched_disruptions": disruptions,
+    }
+
+
+# ==========================================
 # Gemini Reasoning Endpoint: POST /api/analyze
 # ==========================================
 @app.post("/api/analyze", response_model=AnalyzeResponse, tags=["Gemini Analysis"])
@@ -145,11 +218,6 @@ def analyze_order(payload: AnalyzeOrderRequest):
     Takes an order ID, executes the multi-agent orchestrator, performs vector similarity search
     against ChromaDB for related documents, and prompts Gemini to produce a plain-language
     explanation citing specific sources.
-    
-    Returns JSON:
-        - risk_level: "high" | "medium" | "low"
-        - explanation: Plain-language summary with citations
-        - sources: List of source documents and agent findings
     """
     target_id = payload.order_id or payload.id
     order_data = None
@@ -179,60 +247,6 @@ def analyze_order(payload: AnalyzeOrderRequest):
     )
 
     return AnalyzeResponse(**result)
-
-
-# ==========================================
-# MSME Orders Endpoints (Factual Data + Live Dynamic Assessment)
-# ==========================================
-@app.get("/api/orders", tags=["Orders"])
-def list_orders(include_live_risk: bool = Query(True, description="Compute live risk level via orchestrator")):
-    """
-    Returns all 6 realistic Indian MSME supply orders.
-    When include_live_risk is True, evaluates live orchestrator assessments dynamically.
-    """
-    raw_orders = get_all_orders()
-    if not include_live_risk:
-        return {"orders": raw_orders, "count": len(raw_orders)}
-
-    enriched_orders = []
-    for order in raw_orders:
-        assessment = orchestrator.run_all_agents(order)
-        enriched_orders.append({
-            **order,
-            "riskLevel": assessment["riskLevel"],
-            "overall_score": assessment["overall_score"],
-            "critical_findings_count": assessment["critical_findings_count"],
-            "executive_summary": assessment["executive_summary"],
-            "primary_recommendation": assessment["primary_recommendation"],
-        })
-
-    return {"orders": enriched_orders, "count": len(enriched_orders)}
-
-
-@app.get("/api/orders/{order_id}", tags=["Orders"])
-def get_order(order_id: str):
-    """Fetches a specific factual MSME order by ID."""
-    order = get_order_by_id(order_id)
-    if not order:
-        raise HTTPException(status_code=404, detail=f"Order '{order_id}' not found.")
-    return order
-
-
-@app.get("/api/orders/{order_id}/disruptions", tags=["Orders"])
-def get_order_disruptions(order_id: str, n_results: int = Query(2, ge=1, le=5)):
-    """
-    Performs ChromaDB vector similarity search to find matching disruption notices for an order.
-    """
-    order = get_order_by_id(order_id)
-    if not order:
-        raise HTTPException(status_code=404, detail=f"Order '{order_id}' not found.")
-    disruptions = query_disruptions_for_order(order, n_results=n_results)
-    return {
-        "order_id": order_id,
-        "supplier_location": order["supplier_location"],
-        "item": order["item"],
-        "matched_disruptions": disruptions,
-    }
 
 
 # ==========================================

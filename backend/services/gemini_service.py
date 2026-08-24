@@ -15,7 +15,7 @@ load_dotenv(dotenv_path=env_path)
 
 def get_gemini_api_key() -> Optional[str]:
     """Retrieves Gemini API key from environment."""
-    return os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    return os.getenv("GEMINI_API_KEY")
 
 
 def generate_risk_explanation(
