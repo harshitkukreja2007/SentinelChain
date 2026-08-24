@@ -58,6 +58,7 @@ import {
   Pause,
   Bell,
   X,
+  FilterX,
 } from "lucide-react";
 
 interface HealthData {
@@ -331,9 +332,7 @@ export default function Dashboard() {
   // Manage Live Polling Toggle (8-10 seconds interval)
   useEffect(() => {
     if (isLiveMonitoring) {
-      // Fire immediately once on start
       pollNextRiskEvent();
-      // Set up recurring poll every 8.5 seconds
       pollingRef.current = setInterval(() => {
         pollNextRiskEvent();
       }, 8500);
@@ -404,26 +403,28 @@ export default function Dashboard() {
     fetchOrders();
   }, [checkHealth, fetchOrders]);
 
+  // Standard Risk Color Coding per Rule 2.2:
+  // Red: red-500, Amber: amber-500, Green: green-500
   const getRiskBadge = (level?: "low" | "medium" | "high") => {
     if (level === "high") {
       return (
-        <Badge className="bg-red-500/15 text-red-500 border border-red-500/30 text-xs px-2.5 py-0.5">
-          <AlertCircle className="w-3.5 h-3.5 mr-1" />
+        <Badge className="bg-red-500/15 text-red-500 border border-red-500/30 text-xs px-2.5 py-0.5 font-medium flex items-center">
+          <AlertCircle className="w-3.5 h-3.5 mr-1 text-red-500" />
           High Risk
         </Badge>
       );
     }
     if (level === "medium") {
       return (
-        <Badge className="bg-amber-500/15 text-amber-500 border border-amber-500/30 text-xs px-2.5 py-0.5">
-          <AlertTriangle className="w-3.5 h-3.5 mr-1" />
+        <Badge className="bg-amber-500/15 text-amber-500 border border-amber-500/30 text-xs px-2.5 py-0.5 font-medium flex items-center">
+          <AlertTriangle className="w-3.5 h-3.5 mr-1 text-amber-500" />
           Medium Risk
         </Badge>
       );
     }
     return (
-      <Badge className="bg-green-500/15 text-green-500 border border-green-500/30 text-xs px-2.5 py-0.5">
-        <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+      <Badge className="bg-green-500/15 text-green-500 border border-green-500/30 text-xs px-2.5 py-0.5 font-medium flex items-center">
+        <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-green-500" />
         Low Risk
       </Badge>
     );
@@ -449,11 +450,11 @@ export default function Dashboard() {
                 ? "bg-red-950/90 border-red-500/50 text-red-100"
                 : activeToast.severity === "medium"
                 ? "bg-amber-950/90 border-amber-500/50 text-amber-100"
-                : "bg-neutral-900/90 border-neutral-700 text-neutral-100"
+                : "bg-green-950/90 border-green-500/50 text-green-100"
             }`}
           >
             <div className="p-1 rounded bg-black/40 mt-0.5">
-              <Bell className={`w-4 h-4 ${activeToast.severity === "high" ? "text-red-400 animate-bounce" : "text-amber-400"}`} />
+              <Bell className={`w-4 h-4 ${activeToast.severity === "high" ? "text-red-400 animate-bounce" : activeToast.severity === "medium" ? "text-amber-400" : "text-green-400"}`} />
             </div>
             <div className="flex-1 space-y-1 text-xs">
               <div className="flex items-center justify-between">
@@ -504,13 +505,13 @@ export default function Dashboard() {
           <div className="p-3 rounded-lg bg-neutral-950 border border-neutral-800 space-y-2.5">
             <div className="flex items-center justify-between text-[11px]">
               <span className="font-bold uppercase tracking-wider text-neutral-400 flex items-center gap-1.5">
-                <Radio className={`w-3.5 h-3.5 ${isLiveMonitoring ? "text-emerald-400 animate-pulse" : "text-neutral-500"}`} />
+                <Radio className={`w-3.5 h-3.5 ${isLiveMonitoring ? "text-green-500 animate-pulse" : "text-neutral-500"}`} />
                 Live Risk Feed
               </span>
               <Badge
                 variant="outline"
                 className={`text-[9px] px-1.5 py-0 font-mono ${
-                  isLiveMonitoring ? "border-emerald-700 text-emerald-400 bg-emerald-950/40" : "border-neutral-700 text-neutral-500"
+                  isLiveMonitoring ? "border-green-700 text-green-500 bg-green-950/40" : "border-neutral-700 text-neutral-500"
                 }`}
               >
                 {isLiveMonitoring ? "POLLING 8s" : "STANDBY"}
@@ -522,8 +523,8 @@ export default function Dashboard() {
               onClick={() => setIsLiveMonitoring(!isLiveMonitoring)}
               className={`w-full h-8 text-xs font-semibold flex items-center justify-center gap-1.5 ${
                 isLiveMonitoring
-                  ? "bg-red-600/90 hover:bg-red-700 text-white"
-                  : "bg-emerald-600 hover:bg-emerald-500 text-white"
+                  ? "bg-red-600 hover:bg-red-700 text-white"
+                  : "bg-green-600 hover:bg-green-700 text-white"
               }`}
             >
               {isLiveMonitoring ? (
@@ -541,7 +542,7 @@ export default function Dashboard() {
               onClick={() => pollNextRiskEvent()}
               className="w-full text-center text-[10px] text-neutral-400 hover:text-neutral-200 transition-colors py-0.5"
             >
-              + Trigger Single Scenario
+              + Trigger Next Scenario
             </button>
           </div>
 
@@ -575,7 +576,7 @@ export default function Dashboard() {
             </button>
 
             <button className="w-full flex items-center gap-2 px-3 py-2 rounded text-neutral-400 hover:bg-neutral-800/60 hover:text-neutral-200 transition-colors">
-              <Sparkles className="w-4 h-4 text-amber-400" />
+              <Sparkles className="w-4 h-4 text-amber-500" />
               POST /api/ask Q&A
             </button>
             <button className="w-full flex items-center gap-2 px-3 py-2 rounded text-neutral-400 hover:bg-neutral-800/60 hover:text-neutral-200 transition-colors">
@@ -639,24 +640,24 @@ export default function Dashboard() {
           </div>
           <div className="flex items-center justify-between text-[10px] text-neutral-400">
             <span>Continuous Watch:</span>
-            <span className={`font-mono font-semibold ${isLiveMonitoring ? "text-emerald-400" : "text-neutral-500"}`}>
+            <span className={`font-mono font-semibold ${isLiveMonitoring ? "text-green-500" : "text-neutral-500"}`}>
               {isLiveMonitoring ? "Active (8s)" : "Paused"}
             </span>
           </div>
         </div>
       </aside>
 
-      {/* Main Content Area */}
+      {/* Main Content Area (Optimized for Laptop Viewport & High Density) */}
       <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
         {/* Top Header */}
-        <header className="h-14 border-b border-neutral-800 bg-neutral-900/60 px-6 flex items-center justify-between flex-shrink-0">
+        <header className="h-14 border-b border-neutral-800 bg-neutral-900/60 px-4 md:px-6 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 text-xs text-neutral-400">
               <span>Operations</span>
               <span>/</span>
               <span className="text-neutral-100 font-medium">B2B Continuous Risk Intelligence & Live Feed</span>
             </div>
-            <Badge variant="outline" className="hidden sm:inline-flex text-[10px] border-neutral-700 text-neutral-400">
+            <Badge variant="outline" className="hidden lg:inline-flex text-[10px] border-neutral-700 text-neutral-400">
               Color Rules: <span className="text-red-500 mx-1 font-bold">Red (High)</span> | <span className="text-amber-500 mx-1 font-bold">Amber (Med)</span> | <span className="text-green-500 mx-1 font-bold">Green (Low)</span>
             </Badge>
           </div>
@@ -669,7 +670,7 @@ export default function Dashboard() {
               onClick={() => setIsLiveMonitoring(!isLiveMonitoring)}
               className={`h-8 text-xs font-semibold flex items-center gap-1.5 ${
                 isLiveMonitoring
-                  ? "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-500"
+                  ? "bg-green-600 hover:bg-green-700 text-white border-green-500"
                   : "border-neutral-700 bg-neutral-900 text-neutral-200 hover:bg-neutral-800"
               }`}
             >
@@ -690,6 +691,7 @@ export default function Dashboard() {
               <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${loading ? "animate-spin" : ""}`} />
               Sync Orders
             </Button>
+
             <Dialog>
               <DialogTrigger render={<Button size="sm" className="h-8 text-xs bg-neutral-100 text-neutral-900 hover:bg-neutral-200">System Architecture</Button>} />
               <DialogContent className="bg-neutral-900 border-neutral-800 text-neutral-100">
@@ -708,6 +710,10 @@ export default function Dashboard() {
                     <strong className="text-neutral-100 block">Dynamic Orchestrator Re-evaluation</strong>
                     <p className="text-neutral-400">Matching orders are re-scored live and their badges adapt in real time across the dashboard.</p>
                   </div>
+                  <div className="p-2.5 bg-neutral-950 rounded border border-neutral-800 space-y-1">
+                    <strong className="text-neutral-100 block">Standardized Color System</strong>
+                    <p className="text-neutral-400">High Risk: red-500, Medium Risk: amber-500, Low Risk: green-500.</p>
+                  </div>
                 </div>
                 <DialogFooter>
                   <DialogClose render={<Button variant="outline" size="sm" className="border-neutral-700 text-neutral-300">Close</Button>} />
@@ -718,7 +724,7 @@ export default function Dashboard() {
         </header>
 
         {/* Dashboard Body Content */}
-        <div className="p-6 space-y-6">
+        <div className="p-4 md:p-6 space-y-6">
           {/* Top KPI Telemetry Grid (Tremor) */}
           <Grid numItemsSm={2} numItemsLg={4} className="gap-4">
             <TremorCard decoration="top" decorationColor="red" className="bg-neutral-900 border-neutral-800 text-neutral-100 ring-0 p-4">
@@ -727,7 +733,7 @@ export default function Dashboard() {
                 <BadgeDelta deltaType="increase" className="text-xs">Urgent Action</BadgeDelta>
               </Flex>
               <Metric className="text-red-500 text-2xl font-bold mt-1">{highRiskCount} Orders</Metric>
-              <ProgressBar value={(highRiskCount / orders.length) * 100} color="red" className="mt-3" />
+              <ProgressBar value={orders.length > 0 ? (highRiskCount / orders.length) * 100 : 0} color="red" className="mt-3" />
             </TremorCard>
 
             <TremorCard decoration="top" decorationColor="amber" className="bg-neutral-900 border-neutral-800 text-neutral-100 ring-0 p-4">
@@ -736,7 +742,7 @@ export default function Dashboard() {
                 <BadgeDelta deltaType="unchanged" className="text-xs">Monitored</BadgeDelta>
               </Flex>
               <Metric className="text-amber-500 text-2xl font-bold mt-1">{medRiskCount} Orders</Metric>
-              <ProgressBar value={(medRiskCount / orders.length) * 100} color="amber" className="mt-3" />
+              <ProgressBar value={orders.length > 0 ? (medRiskCount / orders.length) * 100 : 0} color="amber" className="mt-3" />
             </TremorCard>
 
             <TremorCard decoration="top" decorationColor="emerald" className="bg-neutral-900 border-neutral-800 text-neutral-100 ring-0 p-4">
@@ -745,13 +751,13 @@ export default function Dashboard() {
                 <BadgeDelta deltaType="moderateIncrease" className="text-xs">Clear Flow</BadgeDelta>
               </Flex>
               <Metric className="text-green-500 text-2xl font-bold mt-1">{lowRiskCount} Orders</Metric>
-              <ProgressBar value={(lowRiskCount / orders.length) * 100} color="emerald" className="mt-3" />
+              <ProgressBar value={orders.length > 0 ? (lowRiskCount / orders.length) * 100 : 0} color="emerald" className="mt-3" />
             </TremorCard>
 
             <TremorCard decoration="top" decorationColor="indigo" className="bg-neutral-900 border-neutral-800 text-neutral-100 ring-0 p-4">
               <Flex justifyContent="between" alignItems="center">
                 <Text className="text-neutral-400 text-xs">Live Risk Feed Status</Text>
-                <Activity className={`w-4 h-4 ${isLiveMonitoring ? "text-emerald-400 animate-pulse" : "text-neutral-500"}`} />
+                <Activity className={`w-4 h-4 ${isLiveMonitoring ? "text-green-500 animate-pulse" : "text-neutral-500"}`} />
               </Flex>
               <Metric className="text-neutral-100 text-2xl font-bold mt-1">
                 {isLiveMonitoring ? "Continuous" : "Standby"}
@@ -783,7 +789,7 @@ export default function Dashboard() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 text-[11px] text-neutral-400">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                  <span className="w-2 h-2 rounded-full bg-green-500"></span>
                   Grounded in Vector DB Notices
                 </div>
               </div>
@@ -936,7 +942,7 @@ export default function Dashboard() {
                 size="sm"
                 variant={filterRisk === "high" ? "default" : "ghost"}
                 onClick={() => setFilterRisk("high")}
-                className={`h-7 text-xs ${filterRisk === "high" ? "bg-red-500/20 text-red-400 border border-red-500/40" : "text-red-500 hover:text-red-400"}`}
+                className={`h-7 text-xs ${filterRisk === "high" ? "bg-red-500/20 text-red-500 border border-red-500/40" : "text-red-500 hover:text-red-400"}`}
               >
                 High ({highRiskCount})
               </Button>
@@ -944,7 +950,7 @@ export default function Dashboard() {
                 size="sm"
                 variant={filterRisk === "medium" ? "default" : "ghost"}
                 onClick={() => setFilterRisk("medium")}
-                className={`h-7 text-xs ${filterRisk === "medium" ? "bg-amber-500/20 text-amber-400 border border-amber-500/40" : "text-amber-500 hover:text-amber-400"}`}
+                className={`h-7 text-xs ${filterRisk === "medium" ? "bg-amber-500/20 text-amber-500 border border-amber-500/40" : "text-amber-500 hover:text-amber-400"}`}
               >
                 Medium ({medRiskCount})
               </Button>
@@ -952,126 +958,172 @@ export default function Dashboard() {
                 size="sm"
                 variant={filterRisk === "low" ? "default" : "ghost"}
                 onClick={() => setFilterRisk("low")}
-                className={`h-7 text-xs ${filterRisk === "low" ? "bg-green-500/20 text-green-400 border border-green-500/40" : "text-green-500 hover:text-green-400"}`}
+                className={`h-7 text-xs ${filterRisk === "low" ? "bg-green-500/20 text-green-500 border border-green-500/40" : "text-green-500 hover:text-green-400"}`}
               >
                 Low ({lowRiskCount})
               </Button>
             </div>
           </div>
 
-          {/* Responsive Cards Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-            {filteredOrders.map((order) => {
-              const riskColor = order.riskLevel === "high" ? "red" : order.riskLevel === "medium" ? "amber" : "emerald";
-              const borderHighlight = order.riskLevel === "high"
-                ? "hover:border-red-500/60"
-                : order.riskLevel === "medium"
-                ? "hover:border-amber-500/60"
-                : "hover:border-green-500/60";
-
-              return (
-                <Card
-                  key={order.id}
-                  onClick={() => router.push(`/orders/${order.id}`)}
-                  className={`bg-neutral-900 border-neutral-800 text-neutral-100 flex flex-col justify-between cursor-pointer transition-all duration-300 hover:shadow-lg hover:shadow-neutral-950/50 hover:-translate-y-0.5 ${borderHighlight} group relative`}
+          {/* Loading State Skeleton Grid */}
+          {loading && (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+              {[1, 2, 3, 4, 5, 6].map((sk) => (
+                <div
+                  key={sk}
+                  className="bg-neutral-900 border border-neutral-800 rounded-lg p-4 space-y-3 animate-pulse"
                 >
-                  <CardHeader className="pb-3 space-y-2">
-                    {/* Top Row: Order ID + Risk Badge */}
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs font-bold text-neutral-300 bg-neutral-950 px-2 py-0.5 rounded border border-neutral-800 group-hover:border-neutral-700">
-                          {order.id}
-                        </span>
-                        <span className="text-[11px] text-neutral-500 truncate max-w-[120px]">
-                          {order.category}
-                        </span>
-                      </div>
-                      {getRiskBadge(order.riskLevel)}
-                    </div>
+                  <div className="flex justify-between items-center">
+                    <div className="h-4 w-24 bg-neutral-800 rounded" />
+                    <div className="h-4 w-16 bg-neutral-800 rounded" />
+                  </div>
+                  <div className="h-5 w-48 bg-neutral-800 rounded" />
+                  <div className="h-3 w-32 bg-neutral-800 rounded" />
+                  <div className="h-12 w-full bg-neutral-950 rounded" />
+                  <div className="h-2 w-full bg-neutral-800 rounded" />
+                </div>
+              ))}
+            </div>
+          )}
 
-                    {/* Supplier Name */}
-                    <div>
-                      <CardTitle className="text-sm font-bold text-neutral-100 group-hover:text-white transition-colors">
-                        {order.supplier_name}
-                      </CardTitle>
-                      <CardDescription className="text-xs text-neutral-400 flex items-center gap-1 mt-0.5">
-                        <MapPin className="w-3 h-3 text-neutral-500 shrink-0" />
-                        {order.supplier_location}
-                      </CardDescription>
-                    </div>
-                  </CardHeader>
+          {/* Empty State when no orders match filter */}
+          {!loading && filteredOrders.length === 0 && (
+            <Card className="bg-neutral-900 border-neutral-800 text-neutral-100 p-8 text-center space-y-3">
+              <div className="w-12 h-12 rounded-full bg-neutral-800 text-neutral-400 flex items-center justify-center mx-auto">
+                <FilterX className="w-6 h-6" />
+              </div>
+              <div className="space-y-1">
+                <CardTitle className="text-base font-bold">No Orders Match Current Risk Filter</CardTitle>
+                <CardDescription className="text-xs text-neutral-400">
+                  There are currently zero orders classified under the &quot;{filterRisk.toUpperCase()}&quot; risk tier.
+                </CardDescription>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setFilterRisk("all")}
+                className="border-neutral-700 text-neutral-200 hover:bg-neutral-800 text-xs"
+              >
+                Reset to All Orders ({orders.length})
+              </Button>
+            </Card>
+          )}
 
-                  <CardContent className="space-y-3 py-0 text-xs">
-                    {/* Ordered Item */}
-                    <div className="p-2.5 rounded bg-neutral-950 border border-neutral-800/80 space-y-1">
-                      <div className="text-[10px] uppercase font-bold tracking-wider text-neutral-500">Procured Item</div>
-                      <div className="text-neutral-200 font-medium line-clamp-2 leading-relaxed">
-                        {order.item}
-                      </div>
-                    </div>
+          {/* Responsive Cards Grid */}
+          {!loading && filteredOrders.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+              {filteredOrders.map((order) => {
+                const riskColor = order.riskLevel === "high" ? "red" : order.riskLevel === "medium" ? "amber" : "emerald";
+                const borderHighlight = order.riskLevel === "high"
+                  ? "hover:border-red-500/60"
+                  : order.riskLevel === "medium"
+                  ? "hover:border-amber-500/60"
+                  : "hover:border-green-500/60";
 
-                    {/* Expected Date & Order Value Row */}
-                    <div className="grid grid-cols-2 gap-2 text-[11px]">
-                      <div className="p-2 rounded bg-neutral-950/60 border border-neutral-850">
-                        <div className="text-neutral-500 text-[10px] flex items-center gap-1">
-                          <Calendar className="w-3 h-3 text-neutral-500" />
-                          Expected Delivery
+                return (
+                  <Card
+                    key={order.id}
+                    onClick={() => router.push(`/orders/${order.id}`)}
+                    className={`bg-neutral-900 border-neutral-800 text-neutral-100 flex flex-col justify-between cursor-pointer transition-all duration-300 hover:shadow-lg hover:shadow-neutral-950/50 hover:-translate-y-0.5 ${borderHighlight} group relative`}
+                  >
+                    <CardHeader className="pb-3 space-y-2">
+                      {/* Top Row: Order ID + Risk Badge */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs font-bold text-neutral-300 bg-neutral-950 px-2 py-0.5 rounded border border-neutral-800 group-hover:border-neutral-700">
+                            {order.id}
+                          </span>
+                          <span className="text-[11px] text-neutral-500 truncate max-w-[120px]">
+                            {order.category}
+                          </span>
                         </div>
-                        <div className="font-mono font-semibold text-neutral-200 mt-0.5">
-                          {order.expected_delivery_date}
+                        {getRiskBadge(order.riskLevel)}
+                      </div>
+
+                      {/* Supplier Name */}
+                      <div>
+                        <CardTitle className="text-sm font-bold text-neutral-100 group-hover:text-white transition-colors">
+                          {order.supplier_name}
+                        </CardTitle>
+                        <CardDescription className="text-xs text-neutral-400 flex items-center gap-1 mt-0.5">
+                          <MapPin className="w-3 h-3 text-neutral-500 shrink-0" />
+                          {order.supplier_location}
+                        </CardDescription>
+                      </div>
+                    </CardHeader>
+
+                    <CardContent className="space-y-3 py-0 text-xs">
+                      {/* Ordered Item */}
+                      <div className="p-2.5 rounded bg-neutral-950 border border-neutral-800/80 space-y-1">
+                        <div className="text-[10px] uppercase font-bold tracking-wider text-neutral-500">Procured Item</div>
+                        <div className="text-neutral-200 font-medium line-clamp-2 leading-relaxed">
+                          {order.item}
                         </div>
                       </div>
 
-                      <div className="p-2 rounded bg-neutral-950/60 border border-neutral-850">
-                        <div className="text-neutral-500 text-[10px] flex items-center gap-1">
-                          <TrendingUp className="w-3 h-3 text-neutral-500" />
-                          Order Value
+                      {/* Expected Date & Order Value Row */}
+                      <div className="grid grid-cols-2 gap-2 text-[11px]">
+                        <div className="p-2 rounded bg-neutral-950/60 border border-neutral-850">
+                          <div className="text-neutral-500 text-[10px] flex items-center gap-1">
+                            <Calendar className="w-3 h-3 text-neutral-500" />
+                            Expected Delivery
+                          </div>
+                          <div className="font-mono font-semibold text-neutral-200 mt-0.5">
+                            {order.expected_delivery_date}
+                          </div>
                         </div>
-                        <div className="font-mono font-semibold text-neutral-200 mt-0.5">
-                          INR {order.order_value_inr ? `${(order.order_value_inr / 100000).toFixed(1)}L` : "N/A"}
+
+                        <div className="p-2 rounded bg-neutral-950/60 border border-neutral-850">
+                          <div className="text-neutral-500 text-[10px] flex items-center gap-1">
+                            <TrendingUp className="w-3 h-3 text-neutral-500" />
+                            Order Value
+                          </div>
+                          <div className="font-mono font-semibold text-neutral-200 mt-0.5">
+                            INR {order.order_value_inr ? `${(order.order_value_inr / 100000).toFixed(1)}L` : "N/A"}
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    {/* Risk Severity Bar & Summary */}
-                    {order.overall_score !== undefined && (
-                      <div className="space-y-1 pt-1">
-                        <div className="flex items-center justify-between text-[11px]">
-                          <span className="text-neutral-400">Composite Risk Score</span>
-                          <span className="font-mono font-bold text-neutral-200">{order.overall_score}/100</span>
+                      {/* Risk Severity Bar & Summary */}
+                      {order.overall_score !== undefined && (
+                        <div className="space-y-1 pt-1">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="text-neutral-400">Composite Risk Score</span>
+                            <span className="font-mono font-bold text-neutral-200">{order.overall_score}/100</span>
+                          </div>
+                          <ProgressBar value={order.overall_score} color={riskColor} className="h-1.5" />
                         </div>
-                        <ProgressBar value={order.overall_score} color={riskColor} className="h-1.5" />
-                      </div>
-                    )}
+                      )}
 
-                    {/* Summary Snippet */}
-                    {order.executive_summary && (
-                      <p className="text-[11px] text-neutral-400 line-clamp-2 leading-relaxed italic">
-                        &ldquo;{order.executive_summary}&rdquo;
-                      </p>
-                    )}
-                  </CardContent>
+                      {/* Summary Snippet */}
+                      {order.executive_summary && (
+                        <p className="text-[11px] text-neutral-400 line-clamp-2 leading-relaxed italic">
+                          &ldquo;{order.executive_summary}&rdquo;
+                        </p>
+                      )}
+                    </CardContent>
 
-                  <CardFooter className="border-t border-neutral-800/80 p-3 mt-3 flex items-center justify-between text-xs text-neutral-400 bg-neutral-950/40">
-                    <span className="text-[11px] text-neutral-500 group-hover:text-neutral-300 transition-colors">
-                      View multi-agent breakdown
-                    </span>
-                    <span className="text-xs font-semibold text-neutral-300 flex items-center gap-1 group-hover:text-white group-hover:translate-x-0.5 transition-all">
-                      Details
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </span>
-                  </CardFooter>
-                </Card>
-              );
-            })}
-          </div>
+                    <CardFooter className="border-t border-neutral-800/80 p-3 mt-3 flex items-center justify-between text-xs text-neutral-400 bg-neutral-950/40">
+                      <span className="text-[11px] text-neutral-500 group-hover:text-neutral-300 transition-colors">
+                        View multi-agent breakdown
+                      </span>
+                      <span className="text-xs font-semibold text-neutral-300 flex items-center gap-1 group-hover:text-white group-hover:translate-x-0.5 transition-all">
+                        Details
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </span>
+                    </CardFooter>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
 
           {/* Live Scrolling Activity Feed at Bottom of Dashboard */}
           <Card className="bg-neutral-900 border-neutral-800 text-neutral-100">
             <CardHeader className="pb-3 border-b border-neutral-800/80">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-emerald-400" />
+                  <Activity className="w-4 h-4 text-green-500" />
                   <CardTitle className="text-sm font-bold">
                     Live Disruption Activity Feed ({feedEvents.length} Events Detected)
                   </CardTitle>
@@ -1080,7 +1132,7 @@ export default function Dashboard() {
                   <Badge
                     variant="outline"
                     className={`text-[10px] font-mono ${
-                      isLiveMonitoring ? "border-emerald-700 text-emerald-400 bg-emerald-950/40" : "border-neutral-700 text-neutral-500"
+                      isLiveMonitoring ? "border-green-700 text-green-500 bg-green-950/40" : "border-neutral-700 text-neutral-500"
                     }`}
                   >
                     {isLiveMonitoring ? "● CONTINUOUS STREAMING" : "○ STREAMING PAUSED"}

@@ -41,6 +41,7 @@ import {
   ShieldAlert,
   HelpCircle,
   ExternalLink,
+  PackageX,
 } from "lucide-react";
 
 interface AgentFinding {
@@ -112,6 +113,8 @@ export default function OrderDetailPage() {
       if (orderRes.ok) {
         const orderData = await orderRes.json();
         setOrder(orderData);
+      } else {
+        setOrder(null);
       }
 
       // 2. Call POST /api/analyze for plain-language explanation and cited sources
@@ -140,26 +143,28 @@ export default function OrderDetailPage() {
     fetchAnalysisAndOrder();
   }, [fetchAnalysisAndOrder]);
 
+  // Standard Risk Color Coding per Rule 2.2:
+  // Red: red-500, Amber: amber-500, Green: green-500
   const getRiskBadge = (level?: "low" | "medium" | "high") => {
     if (level === "high") {
       return (
-        <Badge className="bg-red-500/15 text-red-500 border border-red-500/30 text-xs px-2.5 py-0.5">
-          <AlertCircle className="w-3.5 h-3.5 mr-1" />
+        <Badge className="bg-red-500/15 text-red-500 border border-red-500/30 text-xs px-2.5 py-0.5 font-medium flex items-center">
+          <AlertCircle className="w-3.5 h-3.5 mr-1 text-red-500" />
           High Risk
         </Badge>
       );
     }
     if (level === "medium") {
       return (
-        <Badge className="bg-amber-500/15 text-amber-500 border border-amber-500/30 text-xs px-2.5 py-0.5">
-          <AlertTriangle className="w-3.5 h-3.5 mr-1" />
+        <Badge className="bg-amber-500/15 text-amber-500 border border-amber-500/30 text-xs px-2.5 py-0.5 font-medium flex items-center">
+          <AlertTriangle className="w-3.5 h-3.5 mr-1 text-amber-500" />
           Medium Risk
         </Badge>
       );
     }
     return (
-      <Badge className="bg-green-500/15 text-green-500 border border-green-500/30 text-xs px-2.5 py-0.5">
-        <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+      <Badge className="bg-green-500/15 text-green-500 border border-green-500/30 text-xs px-2.5 py-0.5 font-medium flex items-center">
+        <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-green-500" />
         Low Risk
       </Badge>
     );
@@ -181,13 +186,49 @@ export default function OrderDetailPage() {
 
   const currentRiskLevel = analysis?.risk_level || order?.riskLevel || "low";
 
+  // Loading Skeleton View
   if (loading && !order) {
     return (
-      <div className="min-h-screen bg-neutral-950 text-neutral-100 flex items-center justify-center p-6">
-        <div className="flex flex-col items-center gap-3 text-sm text-neutral-400">
-          <RefreshCw className="w-6 h-6 animate-spin text-indigo-400" />
-          <span>Analyzing order with multi-agent orchestrator & Gemini...</span>
+      <div className="min-h-screen bg-neutral-950 text-neutral-100 font-sans antialiased p-6 space-y-6">
+        <div className="h-12 w-full bg-neutral-900 rounded-lg border border-neutral-800 animate-pulse flex items-center px-4">
+          <div className="h-4 w-32 bg-neutral-800 rounded" />
         </div>
+        <div className="h-44 w-full bg-neutral-900 rounded-lg border border-neutral-800 animate-pulse" />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="h-28 bg-neutral-900 rounded-lg border border-neutral-800 animate-pulse" />
+          <div className="h-28 bg-neutral-900 rounded-lg border border-neutral-800 animate-pulse" />
+          <div className="h-28 bg-neutral-900 rounded-lg border border-neutral-800 animate-pulse" />
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="lg:col-span-7 h-72 bg-neutral-900 rounded-lg border border-neutral-800 animate-pulse" />
+          <div className="lg:col-span-5 h-72 bg-neutral-900 rounded-lg border border-neutral-800 animate-pulse" />
+        </div>
+      </div>
+    );
+  }
+
+  // Not Found / Empty View
+  if (!order) {
+    return (
+      <div className="min-h-screen bg-neutral-950 text-neutral-100 font-sans antialiased p-8 flex items-center justify-center">
+        <Card className="bg-neutral-900 border-neutral-800 text-neutral-100 p-8 max-w-md w-full text-center space-y-4">
+          <div className="w-12 h-12 rounded-full bg-neutral-800 text-neutral-400 flex items-center justify-center mx-auto">
+            <PackageX className="w-6 h-6" />
+          </div>
+          <div className="space-y-1">
+            <CardTitle className="text-lg font-bold">MSME Order Not Found</CardTitle>
+            <CardDescription className="text-xs text-neutral-400">
+              The requested order ID &quot;{orderId}&quot; does not exist in the database.
+            </CardDescription>
+          </div>
+          <Button
+            size="sm"
+            onClick={() => router.push("/")}
+            className="w-full bg-neutral-100 text-neutral-900 hover:bg-neutral-200 text-xs"
+          >
+            <ArrowLeft className="w-4 h-4 mr-1.5" /> Return to Dashboard
+          </Button>
+        </Card>
       </div>
     );
   }
@@ -195,7 +236,7 @@ export default function OrderDetailPage() {
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100 font-sans antialiased">
       {/* Top Header Navigation */}
-      <header className="h-14 border-b border-neutral-800 bg-neutral-900/80 px-6 flex items-center justify-between sticky top-0 z-10 backdrop-blur">
+      <header className="h-14 border-b border-neutral-800 bg-neutral-900/80 px-4 md:px-6 flex items-center justify-between sticky top-0 z-10 backdrop-blur">
         <div className="flex items-center gap-4">
           <Button
             variant="ghost"
@@ -209,12 +250,10 @@ export default function OrderDetailPage() {
           <div className="h-4 w-px bg-neutral-800" />
           <div className="flex items-center gap-2 text-xs">
             <span className="font-mono text-neutral-400">{orderId}</span>
-            {order && (
-              <>
-                <span className="text-neutral-500">/</span>
-                <span className="text-neutral-200 font-semibold">{order.supplier_name}</span>
-              </>
-            )}
+            <span className="text-neutral-500">/</span>
+            <span className="text-neutral-200 font-semibold truncate max-w-[200px] md:max-w-none">
+              {order.supplier_name}
+            </span>
           </div>
         </div>
 
@@ -233,8 +272,8 @@ export default function OrderDetailPage() {
         </div>
       </header>
 
-      {/* Main Container */}
-      <main className="p-6 max-w-7xl mx-auto space-y-6">
+      {/* Main Container (Optimized for Laptop Viewport) */}
+      <main className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
         {/* Error Callout if API failed */}
         {error && (
           <Callout
@@ -248,84 +287,82 @@ export default function OrderDetailPage() {
         )}
 
         {/* Top Order Context Card */}
-        {order && (
-          <Card className="bg-neutral-900 border-neutral-800 text-neutral-100">
-            <CardHeader className="pb-4">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs font-bold text-neutral-300 bg-neutral-950 px-2 py-0.5 rounded border border-neutral-800">
-                      {order.id}
-                    </span>
-                    <Badge variant="outline" className="text-xs border-neutral-700 text-neutral-400">
-                      {order.category}
-                    </Badge>
-                  </div>
-                  <CardTitle className="text-xl font-bold text-neutral-100">
-                    {order.supplier_name}
-                  </CardTitle>
-                  <CardDescription className="text-xs text-neutral-400 flex items-center gap-4">
-                    <span className="flex items-center gap-1">
-                      <MapPin className="w-3.5 h-3.5 text-neutral-500" />
-                      {order.supplier_location}
-                    </span>
-                    <span>•</span>
-                    <span>Dispatch Gateway: <strong>{order.dispatch_port || "Inland Dry Port"}</strong></span>
-                  </CardDescription>
+        <Card className="bg-neutral-900 border-neutral-800 text-neutral-100">
+          <CardHeader className="pb-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-xs font-bold text-neutral-300 bg-neutral-950 px-2 py-0.5 rounded border border-neutral-800">
+                    {order.id}
+                  </span>
+                  <Badge variant="outline" className="text-xs border-neutral-700 text-neutral-400">
+                    {order.category}
+                  </Badge>
                 </div>
+                <CardTitle className="text-xl font-bold text-neutral-100">
+                  {order.supplier_name}
+                </CardTitle>
+                <CardDescription className="text-xs text-neutral-400 flex items-center gap-4">
+                  <span className="flex items-center gap-1">
+                    <MapPin className="w-3.5 h-3.5 text-neutral-500" />
+                    {order.supplier_location}
+                  </span>
+                  <span>•</span>
+                  <span>Dispatch Gateway: <strong>{order.dispatch_port || "Inland Dry Port"}</strong></span>
+                </CardDescription>
+              </div>
 
-                {/* Tremor Visual Risk Indicator */}
-                <div className="w-full md:w-64 space-y-2 p-3 bg-neutral-950 rounded-lg border border-neutral-800">
-                  <Flex justifyContent="between" alignItems="center">
-                    <Text className="text-[11px] text-neutral-400 uppercase font-bold">Threat Severity</Text>
-                    <BadgeDelta
-                      deltaType={currentRiskLevel === "high" ? "increase" : currentRiskLevel === "medium" ? "unchanged" : "decrease"}
-                      className="text-xs"
-                    >
-                      {currentRiskLevel.toUpperCase()}
-                    </BadgeDelta>
-                  </Flex>
-                  <CategoryBar
-                    values={[33, 33, 34]}
-                    colors={["emerald", "amber", "red"]}
-                    markerValue={getCategoryBarValue(currentRiskLevel)}
-                    className="mt-1"
-                  />
-                  <Flex justifyContent="between" className="text-[10px] text-neutral-500 font-mono">
-                    <span>Low</span>
-                    <span>Medium</span>
-                    <span>High</span>
-                  </Flex>
+              {/* Tremor Visual Risk Indicator */}
+              <div className="w-full md:w-64 space-y-2 p-3 bg-neutral-950 rounded-lg border border-neutral-800">
+                <Flex justifyContent="between" alignItems="center">
+                  <Text className="text-[11px] text-neutral-400 uppercase font-bold">Threat Severity</Text>
+                  <BadgeDelta
+                    deltaType={currentRiskLevel === "high" ? "increase" : currentRiskLevel === "medium" ? "unchanged" : "decrease"}
+                    className="text-xs"
+                  >
+                    {currentRiskLevel.toUpperCase()}
+                  </BadgeDelta>
+                </Flex>
+                <CategoryBar
+                  values={[33, 33, 34]}
+                  colors={["emerald", "amber", "red"]}
+                  markerValue={getCategoryBarValue(currentRiskLevel)}
+                  className="mt-1"
+                />
+                <Flex justifyContent="between" className="text-[10px] text-neutral-500 font-mono">
+                  <span>Low</span>
+                  <span>Medium</span>
+                  <span>High</span>
+                </Flex>
+              </div>
+            </div>
+          </CardHeader>
+
+          <CardContent className="space-y-4 pt-0 text-xs border-t border-neutral-800/80 pt-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="p-3 rounded-lg bg-neutral-950 border border-neutral-800 space-y-1">
+                <div className="text-[10px] uppercase font-bold text-neutral-500">Procured Component</div>
+                <div className="font-medium text-neutral-200 text-sm">{order.item}</div>
+              </div>
+              <div className="p-3 rounded-lg bg-neutral-950 border border-neutral-800 space-y-1">
+                <div className="text-[10px] uppercase font-bold text-neutral-500 flex items-center gap-1">
+                  <Calendar className="w-3 h-3 text-neutral-500" />
+                  Expected Delivery Date
+                </div>
+                <div className="font-mono font-semibold text-neutral-200 text-sm">{order.expected_delivery_date}</div>
+              </div>
+              <div className="p-3 rounded-lg bg-neutral-950 border border-neutral-800 space-y-1">
+                <div className="text-[10px] uppercase font-bold text-neutral-500 flex items-center gap-1">
+                  <TrendingUp className="w-3 h-3 text-neutral-500" />
+                  Capital Allocation
+                </div>
+                <div className="font-mono font-semibold text-neutral-200 text-sm">
+                  INR {order.order_value_inr ? `${(order.order_value_inr / 100000).toFixed(2)} Lakhs` : "N/A"}
                 </div>
               </div>
-            </CardHeader>
-
-            <CardContent className="space-y-4 pt-0 text-xs border-t border-neutral-800/80 pt-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-3 rounded-lg bg-neutral-950 border border-neutral-800 space-y-1">
-                  <div className="text-[10px] uppercase font-bold text-neutral-500">Procured Component</div>
-                  <div className="font-medium text-neutral-200 text-sm">{order.item}</div>
-                </div>
-                <div className="p-3 rounded-lg bg-neutral-950 border border-neutral-800 space-y-1">
-                  <div className="text-[10px] uppercase font-bold text-neutral-500 flex items-center gap-1">
-                    <Calendar className="w-3 h-3 text-neutral-500" />
-                    Expected Delivery Date
-                  </div>
-                  <div className="font-mono font-semibold text-neutral-200 text-sm">{order.expected_delivery_date}</div>
-                </div>
-                <div className="p-3 rounded-lg bg-neutral-950 border border-neutral-800 space-y-1">
-                  <div className="text-[10px] uppercase font-bold text-neutral-500 flex items-center gap-1">
-                    <TrendingUp className="w-3 h-3 text-neutral-500" />
-                    Capital Allocation
-                  </div>
-                  <div className="font-mono font-semibold text-neutral-200 text-sm">
-                    INR {order.order_value_inr ? `${(order.order_value_inr / 100000).toFixed(2)} Lakhs` : "N/A"}
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Tremor KPI Indicator Grid */}
         <Grid numItemsSm={1} numItemsLg={3} className="gap-4">
@@ -358,9 +395,9 @@ export default function OrderDetailPage() {
           <TremorCard decoration="top" decorationColor="emerald" className="bg-neutral-900 border-neutral-800 text-neutral-100 ring-0 p-4">
             <Flex justifyContent="between" alignItems="center">
               <Text className="text-neutral-400 text-xs">AI Synthesis Status</Text>
-              <Sparkles className="w-4 h-4 text-emerald-400" />
+              <Sparkles className="w-4 h-4 text-green-500" />
             </Flex>
-            <Metric className="text-emerald-400 text-2xl font-bold mt-1">
+            <Metric className="text-green-500 text-2xl font-bold mt-1">
               {analyzing ? "Synthesizing..." : "Active & Verified"}
             </Metric>
             <Text className="text-neutral-500 text-xs mt-2">
@@ -378,7 +415,7 @@ export default function OrderDetailPage() {
               <CardHeader className="pb-3 border-b border-neutral-800/80">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
-                    <div className="p-1.5 bg-amber-500/10 border border-amber-500/30 rounded text-amber-400">
+                    <div className="p-1.5 bg-amber-500/10 border border-amber-500/30 rounded text-amber-500">
                       <Sparkles className="w-4 h-4" />
                     </div>
                     <div>
@@ -448,7 +485,7 @@ export default function OrderDetailPage() {
 
                                 <div className="flex items-center gap-2 self-start sm:self-center">
                                   {source.similarity !== undefined && (
-                                    <span className="text-[11px] font-mono text-emerald-400 bg-neutral-900 px-2 py-0.5 rounded border border-neutral-800">
+                                    <span className="text-[11px] font-mono text-green-500 bg-neutral-900 px-2 py-0.5 rounded border border-neutral-800">
                                       {(source.similarity * 100).toFixed(1)}% vector match
                                     </span>
                                   )}
@@ -496,7 +533,7 @@ export default function OrderDetailPage() {
               </CardHeader>
 
               <CardContent className="p-4 space-y-3 pt-4">
-                {order?.findings.map((finding) => {
+                {order.findings.map((finding) => {
                   const findingRiskColor = finding.risk_level === "high" ? "red" : finding.risk_level === "medium" ? "amber" : "emerald";
                   return (
                     <div
