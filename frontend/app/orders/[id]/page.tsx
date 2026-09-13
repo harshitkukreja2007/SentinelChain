@@ -90,6 +90,8 @@ interface AnalyzeApiResponse {
   sources: SourceItem[];
 }
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
 export default function OrderDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -109,7 +111,7 @@ export default function OrderDetailPage() {
 
     try {
       // 1. Fetch factual order & telemetry from backend
-      const orderRes = await fetch(`http://127.0.0.1:8000/api/orders/${orderId}`);
+      const orderRes = await fetch(`${API_BASE_URL}/api/orders/${orderId}`);
       if (orderRes.ok) {
         const orderData = await orderRes.json();
         setOrder(orderData);
@@ -118,7 +120,7 @@ export default function OrderDetailPage() {
       }
 
       // 2. Call POST /api/analyze for plain-language explanation and cited sources
-      const analyzeRes = await fetch("http://127.0.0.1:8000/api/analyze", {
+      const analyzeRes = await fetch(`${API_BASE_URL}/api/analyze`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ order_id: orderId }),

@@ -219,6 +219,8 @@ const fallbackOrders: FactualMSMEOrder[] = [
   }
 ];
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
 export default function Dashboard() {
   const router = useRouter();
   const [orders, setOrders] = useState<FactualMSMEOrder[]>(fallbackOrders);
@@ -262,7 +264,7 @@ export default function Dashboard() {
   const fetchOrders = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/orders?include_live_risk=true");
+      const res = await fetch(`${API_BASE_URL}/api/orders?include_live_risk=true`);
       if (res.ok) {
         const data = await res.json();
         if (data.orders && data.orders.length > 0) {
@@ -279,7 +281,7 @@ export default function Dashboard() {
   const checkHealth = useCallback(async () => {
     setHealthLoading(true);
     try {
-      const res = await fetch("http://127.0.0.1:8000/health");
+      const res = await fetch(`${API_BASE_URL}/health`);
       if (res.ok) {
         const data = await res.json();
         setBackendHealth(data);
@@ -294,7 +296,7 @@ export default function Dashboard() {
   // Poll single live risk event
   const pollNextRiskEvent = useCallback(async () => {
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/feed/next-event", {
+      const res = await fetch(`${API_BASE_URL}/api/feed/next-event`, {
         method: "POST",
       });
       if (res.ok) {
@@ -368,7 +370,7 @@ export default function Dashboard() {
     setChatLoading(true);
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/ask", {
+      const res = await fetch(`${API_BASE_URL}/api/ask`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question: questionToAsk.trim(), n_results: 3 }),
